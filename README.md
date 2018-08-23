@@ -1,3 +1,5 @@
+This is a work in progress - it should should not be used
+
 This is a generalized imlempentation of a commit reveal voting scheme
 
 A few differences from other implementations
