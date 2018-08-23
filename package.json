@@ -1,0 +1,25 @@
+{
+  "name": "commit-reveal-voting",
+  "version": "0.0.1",
+  "description": "Solidity contract that manages commit reveal voting",
+  "main": "truffle.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "truffle test --network test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TruSet/commit-reveal-voting.git"
+  },
+  "author": "Greg Taschuk <greg.taschuk@consensys.net> (https://github.com/gtaschuk)",
+  "license": "UNLICENSED",
+  "bugs": {
+    "url": "https://github.com/TruSet/commit-reveal-voting/issues"
+  },
+  "homepage": "https://github.com/TruSet/commit-reveal-voting#readme",
+  "devDependencies": {
+    "truffle": "^4.1.14"
+  }
+}
