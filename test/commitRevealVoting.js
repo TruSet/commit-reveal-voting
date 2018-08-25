@@ -1,13 +1,19 @@
 const CommitRevealVoting = artifacts.require('./CommitRevealVoting.sol');
+const RBAC = artifacts.require('./test-contracts/TestRBAC.sol');
 const utils = require('./utils.js')
 
 contract('CommitRevealVoting', function (accounts) {
   let [greg, neil] = accounts
   let crv;
+  let rbac;
   let defaultSalt = '666';
 
   before(async function () {
     crv = await CommitRevealVoting.deployed()
+    rbac = await RBAC.deployed()
+    let promises = accounts.map((account) => rbac.makeVoter(account))
+    promises.push(rbac.makeAdmin(accounts[0]))
+    await Promise.all(promises)
   })
 
 

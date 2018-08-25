@@ -1,4 +1,5 @@
 pragma solidity ^0.4.8;
+import "./AbstractRBAC.sol";
 
 /**
 @title Partial-Lock-Commit-Reveal Voting scheme with ERC20 tokens
@@ -7,6 +8,7 @@ pragma solidity ^0.4.8;
 // TODO revealEndDate -> revealDuration (short circuited by complete reveal)
 //      allow you to start the reveal period from a function call
 contract CommitRevealVoting {
+    AbstractRBAC rbac;
 
     // ============
     // EVENTS:
@@ -35,11 +37,22 @@ contract CommitRevealVoting {
     mapping(bytes32 => Poll) public pollMap; // maps pollID to Poll struct
     mapping(bytes32 => mapping(address => bytes32)) commitHashes; // [pollID][user]
 
-    /**
-    @dev Initializer. Can only be called once.
-    */
-    //function init() public {
-    //}
+    constructor(address _rbac) public {
+      rbac = AbstractRBAC(_rbac);
+    }
+
+    string public constant ROLE_ADMIN = "commit_reveal_admin";
+    string public constant ROLE_VOTE = "commit_reveal_vote";
+
+    modifier onlyAdmin() {
+      rbac.checkRole(msg.sender, ROLE_ADMIN);
+      _;
+    }
+
+    modifier onlyVoters() {
+      rbac.checkRole(msg.sender, ROLE_VOTE);
+      _;
+    }
 
     // =================
     // VOTING INTERFACE:
@@ -50,7 +63,9 @@ contract CommitRevealVoting {
     @param _pollID Integer identifier associated with target poll
     @param _secretHash Commit keccak256 hash of voter's choice and salt (tightly packed in this order)
     */
-    function commitVote(bytes32 _pollID, bytes32 _secretHash) public {
+    function commitVote(bytes32 _pollID, bytes32 _secretHash) public
+    onlyVoters
+    {
         require(commitPeriodActive(_pollID));
         // prevent user from committing to zero node placeholder
         require(_pollID != 0);
@@ -69,7 +84,9 @@ contract CommitRevealVoting {
     @param _pollIDs         Array of integer identifiers associated with target polls
     @param _secretHashes    Array of commit keccak256 hashes of voter's choices and salts (tightly packed in this order)
     */
-    function commitVotes(bytes32[] _pollIDs, bytes32[] _secretHashes) external {
+    function commitVotes(bytes32[] _pollIDs, bytes32[] _secretHashes) external
+    onlyVoters
+    {
         // make sure the array lengths are all the same
         require(_pollIDs.length == _secretHashes.length);
 
@@ -131,7 +148,10 @@ contract CommitRevealVoting {
     @param _commitDuration Length of desired commit period in seconds
     @param _revealDuration Length of desired reveal period in seconds
     */
-    function startPoll(bytes32 _pollID, uint _voteQuorum, uint _commitDuration, uint _revealDuration) public returns (bytes32 pollID) {
+    function startPoll(bytes32 _pollID, uint _voteQuorum, uint _commitDuration, uint _revealDuration) public 
+    onlyAdmin
+    returns (bytes32 pollID)
+    {
         // using safemath
         //uint commitEndDate = block.timestamp.add(_commitDuration);
         //uint revealEndDate = commitEndDate.add(_revealDuration);
