@@ -43,6 +43,8 @@ contract CommitRevealVoting {
 
     string public constant ROLE_ADMIN = "commit_reveal_admin";
     string public constant ROLE_VOTE = "commit_reveal_vote";
+    uint public constant MAX_COMMIT_DURATION_IN_SECONDS = 365 days;
+    uint public constant MAX_REVEAL_DURATION_IN_SECONDS = 365 days;
 
     modifier onlyAdmin() {
       rbac.checkRole(msg.sender, ROLE_ADMIN);
@@ -153,15 +155,18 @@ contract CommitRevealVoting {
     onlyAdmin
     returns (bytes32 pollID)
     {
-        // TODO: check that poll does not already exist, and that durations and quorum are within expected bounds
-        // using safemath
+        // TODO: use safemath
+        require(!pollExists(_pollID));
+        require(_commitDuration > 0 && _commitDuration <= MAX_COMMIT_DURATION_IN_SECONDS, "0 < commitDuration <= 365 days");
+        require(_revealDuration > 0 && _revealDuration <= MAX_REVEAL_DURATION_IN_SECONDS, "0 < revealDuration <= 365 days");
         //uint commitEndDate = block.timestamp.add(_commitDuration);
         //uint revealEndDate = commitEndDate.add(_revealDuration);
         uint commitEndDate = block.timestamp + _commitDuration;
+        assert(commitEndDate > 0); // Redundant "Double Check" because we rely on a non-zero value implying poll existence
         uint revealEndDate = commitEndDate + _revealDuration;
 
         pollMap[_pollID] = Poll({
-            commitEndDate: commitEndDate,
+            commitEndDate: commitEndDate, // Invariant: all (active or inactive) Polls have a non-zero commitEndDate
             revealEndDate: revealEndDate,
             voteQuorum: _voteQuorum,
             votesFor: 0,
@@ -265,9 +270,8 @@ contract CommitRevealVoting {
     @param _pollID The pollID whose existance is to be evaluated.
     @return Boolean Indicates whether a poll exists for the provided pollID
     */
-    function pollExists(bytes32 _pollID) pure public returns (bool exists) {
-        // TODO: check it actually exists, and change pure to view
-        return (_pollID != 0);
+    function pollExists(bytes32 _pollID) view public returns (bool exists) {
+        return (_pollID != 0) && (pollMap[_pollID].commitEndDate > 0);
     }
 
     // ---------------------------
