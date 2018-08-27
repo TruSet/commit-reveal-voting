@@ -177,7 +177,7 @@ contract CommitRevealVoting {
     @dev Check if votesFor out of totalVotes exceeds votesQuorum (requires pollEnded)
     @param _pollID Integer identifier associated with target poll
     */
-    function isPassed(bytes32 _pollID) constant public returns (bool passed) {
+    function isPassed(bytes32 _pollID) view public returns (bool passed) {
         require(pollEnded(_pollID));
 
         Poll memory poll = pollMap[_pollID];
@@ -193,7 +193,7 @@ contract CommitRevealVoting {
     @param _pollID Bytes32 identifier associated with target poll
     @return Total number of votes committed to the winning option for specified poll
     */
-    function getTotalNumberOfWinningVotes(bytes32 _pollID) constant public returns (uint numTokens) {
+    function getTotalNumberOfWinningVotes(bytes32 _pollID) view public returns (uint numTokens) {
         require(pollEnded(_pollID));
 
         if (isPassed(_pollID))
@@ -207,7 +207,7 @@ contract CommitRevealVoting {
     @dev Checks isExpired for specified poll's revealEndDate
     @return Boolean indication of whether polling period is over
     */
-    function pollEnded(bytes32 _pollID) constant public returns (bool ended) {
+    function pollEnded(bytes32 _pollID) view public returns (bool ended) {
         require(pollExists(_pollID));
 
         return isExpired(pollMap[_pollID].revealEndDate);
@@ -219,7 +219,7 @@ contract CommitRevealVoting {
     @param _pollID Integer identifier associated with target poll
     @return Boolean indication of isCommitPeriodActive for target poll
     */
-    function commitPeriodActive(bytes32 _pollID) constant public returns (bool active) {
+    function commitPeriodActive(bytes32 _pollID) view public returns (bool active) {
         require(pollExists(_pollID));
 
         return !isExpired(pollMap[_pollID].commitEndDate);
@@ -230,7 +230,7 @@ contract CommitRevealVoting {
     @dev Checks isExpired for the specified poll's revealEndDate
     @param _pollID Integer identifier associated with target poll
     */
-    function revealPeriodActive(bytes32 _pollID) constant public returns (bool active) {
+    function revealPeriodActive(bytes32 _pollID) view public returns (bool active) {
         require(pollExists(_pollID));
 
         return !isExpired(pollMap[_pollID].revealEndDate) && !commitPeriodActive(_pollID);
@@ -242,7 +242,7 @@ contract CommitRevealVoting {
     @param _pollID Integer identifier associated with target poll
     @return Boolean indication of whether user has committed
     */
-    function didCommit(address _voter, bytes32 _pollID) constant public returns (bool committed) {
+    function didCommit(address _voter, bytes32 _pollID) view public returns (bool committed) {
         require(pollExists(_pollID));
 
         return pollMap[_pollID].didCommit[_voter];
@@ -254,7 +254,7 @@ contract CommitRevealVoting {
     @param _pollID Integer identifier associated with target poll
     @return Boolean indication of whether user has revealed
     */
-    function didReveal(address _voter, bytes32 _pollID) constant public returns (bool revealed) {
+    function didReveal(address _voter, bytes32 _pollID) view public returns (bool revealed) {
         require(pollExists(_pollID));
 
         return pollMap[_pollID].didReveal[_voter];
@@ -266,6 +266,7 @@ contract CommitRevealVoting {
     @return Boolean Indicates whether a poll exists for the provided pollID
     */
     function pollExists(bytes32 _pollID) pure public returns (bool exists) {
+        // TODO: check it actually exists, and change pure to view
         return (_pollID != 0);
     }
 
@@ -279,7 +280,7 @@ contract CommitRevealVoting {
     @param _pollID Integer identifier associated with target poll
     @return Bytes32 hash property attached to target poll
     */
-    function getCommitHash(address _voter, bytes32 _pollID) constant public returns (bytes32 commitHash) {
+    function getCommitHash(address _voter, bytes32 _pollID) view public returns (bytes32 commitHash) {
         return commitHashes[_pollID][_voter];
     }
 
@@ -292,7 +293,7 @@ contract CommitRevealVoting {
     @param _terminationDate Integer timestamp of date to compare current timestamp with
     @return expired Boolean indication of whether the terminationDate has passed
     */
-    function isExpired(uint _terminationDate) constant public returns (bool expired) {
+    function isExpired(uint _terminationDate) view public returns (bool expired) {
         return (block.timestamp > _terminationDate);
     }
 }
