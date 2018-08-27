@@ -2,8 +2,9 @@ pragma solidity ^0.4.8;
 import "./AbstractRBAC.sol";
 
 /**
-@title Partial-Lock-Commit-Reveal Voting scheme with ERC20 tokens
-@author Team: Aspyn Palatnick, Cem Ozer, Yorke Rhodes
+@title Commit-Reveal Voting scheme with permissioned participants
+@author TruSet
+// Adapted from "Partial-Lock-Commit-Reveal Voting scheme with ERC20 tokens" by Aspyn Palatnick, Cem Ozer, Yorke Rhodes
 */
 // TODO revealEndDate -> revealDuration (short circuited by complete reveal)
 //      allow you to start the reveal period from a function call
