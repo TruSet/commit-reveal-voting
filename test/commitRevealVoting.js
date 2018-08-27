@@ -19,7 +19,7 @@ contract('CommitRevealVoting', function (accounts) {
 
   it('creates a poll', async function () {
     let pollID = 'testPoll'
-    await crv.startPoll(pollID, 51, 24*60*60, 5*60*60)
+    await crv.startPoll(pollID, 24*60*60, 5*60*60)
 
     let pollEnded = await crv.pollEnded.call(pollID)
     assert.equal(pollEnded, false, 'poll should be open')
@@ -38,7 +38,7 @@ contract('CommitRevealVoting', function (accounts) {
     let pollID = 'testPoll2'
 
     before(async function () {
-      await crv.startPoll(pollID, 51, 24*60*60, 5*60*60)
+      await crv.startPoll(pollID, 24*60*60, 5*60*60)
     })
 
     it('allows you to commit a vote', async function() {
