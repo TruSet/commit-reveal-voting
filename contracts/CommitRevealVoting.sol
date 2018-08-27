@@ -194,17 +194,17 @@ contract CommitRevealVoting {
     // ----------------
 
     /**
-    @dev Gets the total winning votes for reward distribution purposes
+    @dev Gets the total winning and losing votes for reward distribution purposes
     @param _pollID Bytes32 identifier associated with target poll
-    @return Total number of votes committed to the winning option for specified poll
+    @return Total number of winning votes and losing votes (in that order) for specified, already-ended poll
     */
-    function getTotalNumberOfWinningVotes(bytes32 _pollID) view public returns (uint numTokens) {
+    function getTotalNumberOfWinningVotes(bytes32 _pollID) view public returns (uint numWinningVotes, uint numLosingVotes) {
         require(pollEnded(_pollID));
 
         if (isPassed(_pollID))
-            return pollMap[_pollID].votesFor;
+            return (pollMap[_pollID].votesFor, pollMap[_pollID].votesAgainst);
         else
-            return pollMap[_pollID].votesAgainst;
+            return (pollMap[_pollID].votesAgainst, pollMap[_pollID].votesFor);
     }
 
     /**
