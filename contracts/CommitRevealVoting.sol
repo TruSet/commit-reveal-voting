@@ -11,7 +11,6 @@ import "openzeppelin-solidity/contracts/math/SafeMath.sol";
 // TODO revealEndDate -> revealDuration (short circuited by complete reveal)
 //      RevealPeriodStarted events per Greg's API spec - probably doesn't make sense to make these here but could the instrument sensibly make some?
 //      allow you to start the reveal period from a function call
-//      fix comment formatting
 //      allow anyone to reveal someone else's vote
 contract CommitRevealVoting {
     using SafeMath for uint;
@@ -70,9 +69,9 @@ contract CommitRevealVoting {
     // =================
 
     /**
-    @notice Commits vote using hash of choice and secret salt to conceal vote until reveal
-    @param _pollID Identifer associated with target poll
-    @param _secretHash Commit keccak256 hash of voter's choice and salt (tightly packed in this order)
+    * @notice Commits vote using hash of choice and secret salt to conceal vote until reveal
+    * @param _pollID Identifer associated with target poll
+    * @param _secretHash Commit keccak256 hash of voter's choice and salt (tightly packed in this order)
     */
     function commitVote(bytes32 _pollID, bytes32 _secretHash) public
     onlyVoters
@@ -95,9 +94,9 @@ contract CommitRevealVoting {
     }
 
     /**
-    @notice                 Commits votes using hashes of choices and secret salts to conceal votes until reveal
-    @param _pollIDs         Array of identifers associated with target polls
-    @param _secretHashes    Array of commit keccak256 hashes of voter's choices and salts (tightly packed in this order)
+    * @notice                 Commits votes using hashes of choices and secret salts to conceal votes until reveal
+    * @param _pollIDs         Array of identifers associated with target polls
+    * @param _secretHashes    Array of commit keccak256 hashes of voter's choices and salts (tightly packed in this order)
     */
     function commitVotes(bytes32[] _pollIDs, bytes32[] _secretHashes) external
     onlyVoters
@@ -112,10 +111,10 @@ contract CommitRevealVoting {
     }
 
     /**
-    @notice Reveals vote with choice and secret salt used in generating commitHash to attribute committed tokens
-    @param _pollID Identifer associated with target poll
-    @param _voteOption Vote choice used to generate commitHash for associated poll
-    @param _salt Secret number used to generate commitHash for associated poll
+    * @notice Reveals vote with choice and secret salt used in generating commitHash to attribute committed tokens
+    * @param _pollID Identifer associated with target poll
+    * @param _voteOption Vote choice used to generate commitHash for associated poll
+    * @param _salt Secret number used to generate commitHash for associated poll
     */
     // TODO this function - or a new one - should take user address as an argument, allow you to reveal for anyone
     function revealVote(bytes32 _pollID, uint _voteOption, uint _salt) public {
@@ -143,10 +142,10 @@ contract CommitRevealVoting {
     }
 
     /**
-    @notice             Reveals multiple votes with choices and secret salts used in generating commitHashes to attribute committed tokens
-    @param _pollIDs     Array of identifers associated with target polls
-    @param _voteOptions Array of vote choices used to verify commitHashes for associated polls
-    @param _salts       Array of secret numbers used to verify commitHashes for associated polls
+    * @notice             Reveals multiple votes with choices and secret salts used in generating commitHashes to attribute committed tokens
+    * @param _pollIDs     Array of identifers associated with target polls
+    * @param _voteOptions Array of vote choices used to verify commitHashes for associated polls
+    * @param _salts       Array of secret numbers used to verify commitHashes for associated polls
     */
     function revealVotes(bytes32[] _pollIDs, uint[] _voteOptions, uint[] _salts) external {
         // make sure the array lengths are all the same
@@ -164,9 +163,9 @@ contract CommitRevealVoting {
     // ==================
 
     /**
-    @dev Initiates a poll with canonical configured parameters at pollID emitted by PollCreated event
-    @param _commitDuration Length of desired commit period in seconds
-    @param _revealDuration Length of desired reveal period in seconds
+    * @dev Initiates a poll with canonical configured parameters at pollID emitted by PollCreated event
+    * @param _commitDuration Length of desired commit period in seconds
+    * @param _revealDuration Length of desired reveal period in seconds
     */
     function startPoll(bytes32 _pollID, uint _commitDuration, uint _revealDuration) public 
     onlyAdmin
@@ -196,10 +195,10 @@ contract CommitRevealVoting {
     // ----------------
 
     /**
-    @dev Gets the vote counts for a poll
-         N.B. Any code wishing to apportion rewards on this basis should also ensure that the reveal period is over.
-    @param _pollID Bytes32 identifier associated with target poll
-    @return Total number of 'For' votes, 'Against' votes, and committed votes that were not revealed. (3 integers, in that order.)
+    * @dev Gets the vote counts for a poll
+    *      N.B. Any code wishing to apportion rewards on this basis should also ensure that the reveal period is over.
+    * @param _pollID Bytes32 identifier associated with target poll
+    * @return Total number of 'For' votes, 'Against' votes, and committed votes that were not revealed. (3 integers, in that order.)
     */
     function getVoteCounts(bytes32 _pollID) view public
         returns (
@@ -211,9 +210,9 @@ contract CommitRevealVoting {
     }
 
     /**
-    @notice Determines if poll is over
-    @dev Checks isExpired for specified poll's revealEndDate
-    @return Boolean indication of whether polling period is over
+    * @notice Determines if poll is over
+    * @dev Checks isExpired for specified poll's revealEndDate
+    * @return Boolean indication of whether polling period is over
     */
     function pollEnded(bytes32 _pollID) view public returns (bool ended) {
         require(pollExists(_pollID));
@@ -221,10 +220,10 @@ contract CommitRevealVoting {
     }
 
     /**
-    @notice Checks if the commit period is still active for the specified poll
-    @dev Checks isExpired for the specified poll's commitEndDate
-    @param _pollID Identifer associated with target poll
-    @return Boolean indication of isCommitPeriodActive for target poll
+    * @notice Checks if the commit period is still active for the specified poll
+    * @dev Checks isExpired for the specified poll's commitEndDate
+    * @param _pollID Identifer associated with target poll
+    * @return Boolean indication of isCommitPeriodActive for target poll
     */
     function commitPeriodActive(bytes32 _pollID) view public returns (bool active) {
         require(pollExists(_pollID));
@@ -232,9 +231,9 @@ contract CommitRevealVoting {
     }
 
     /**
-    @notice Checks if the reveal period is still active for the specified poll
-    @dev Checks isExpired for the specified poll's revealEndDate
-    @param _pollID Identifer associated with target poll
+    * @notice Checks if the reveal period is still active for the specified poll
+    * @dev Checks isExpired for the specified poll's revealEndDate
+    * @param _pollID Identifer associated with target poll
     */
     function revealPeriodActive(bytes32 _pollID) view public returns (bool active) {
         require(pollExists(_pollID));
@@ -242,10 +241,10 @@ contract CommitRevealVoting {
     }
 
     /**
-    @dev Checks if user has committed for specified poll
-    @param _pollID Identifier associated with target poll
-    @param _voter Address of user to check
-    @return Boolean indication of whether user has committed
+    * @dev Checks if user has committed for specified poll
+    * @param _pollID Identifier associated with target poll
+    * @param _voter Address of user to check
+    * @return Boolean indication of whether user has committed
     */
     function didCommit(bytes32 _pollID, address _voter) view public returns (bool committed) {
         require(pollExists(_pollID));
@@ -265,11 +264,11 @@ contract CommitRevealVoting {
     }
 
     /**
-    @dev Checks if user voted 'For' (i.e. affirmative) in a specified poll.
-         N.B. Any code wishing to apportion rewards on this basis should also ensure that the reveal period is over.
-    @param _pollID Identifier associated with target poll
-    @param _voter Address of user to check
-    @return Boolean indication of whether user voted 'For'
+    * @dev Checks if user voted 'For' (i.e. affirmative) in a specified poll.
+    *      N.B. Any code wishing to apportion rewards on this basis should also ensure that the reveal period is over.
+    * @param _pollID Identifier associated with target poll
+    * @param _voter Address of user to check
+    * @return Boolean indication of whether user voted 'For'
     */
     function didVoteFor(bytes32 _pollID, address _voter) view public returns (bool revealed) {
         require(pollExists(_pollID));
@@ -278,11 +277,11 @@ contract CommitRevealVoting {
     }
 
     /**
-    @dev Checks if user voted 'Against' in a specified poll
-         N.B. Any code wishing to apportion rewards on this basis should also ensure that the reveal period is over.
-    @param _pollID Identifier associated with target poll
-    @param _voter Address of user to check
-    @return Boolean indication of whether user voted 'Against'
+    * @dev Checks if user voted 'Against' in a specified poll
+    *      N.B. Any code wishing to apportion rewards on this basis should also ensure that the reveal period is over.
+    * @param _pollID Identifier associated with target poll
+    * @param _voter Address of user to check
+    * @return Boolean indication of whether user voted 'Against'
     */
     function didVoteAgainst(bytes32 _pollID, address _voter) view public returns (bool revealed) {
         require(pollExists(_pollID));
@@ -291,9 +290,9 @@ contract CommitRevealVoting {
     }
 
     /**
-    @dev Checks if a poll exists
-    @param _pollID The pollID whose existance is to be evaluated.
-    @return Boolean Indicates whether a poll exists for the provided pollID
+    * @dev Checks if a poll exists
+    * @param _pollID The pollID whose existance is to be evaluated.
+    * @return Boolean Indicates whether a poll exists for the provided pollID
     */
     function pollExists(bytes32 _pollID) view public returns (bool exists) {
         return (_pollID != 0) && (pollMap[_pollID].commitEndDate > 0);
@@ -304,10 +303,10 @@ contract CommitRevealVoting {
     // ---------------------------
 
     /**
-    @dev Gets the bytes32 commitHash property of target poll
-    @param _voter Address of user to check against
-    @param _pollID Identifer associated with target poll
-    @return Bytes32 hash property attached to target poll
+    * @dev Gets the bytes32 commitHash property of target poll
+    * @param _voter Address of user to check against
+    * @param _pollID Identifer associated with target poll
+    * @return Bytes32 hash property attached to target poll
     */
     function getCommitHash(bytes32 _pollID, address _voter) view public returns (bytes32 commitHash) {
         return pollMap[_pollID].commitHashes[_voter];
@@ -318,9 +317,9 @@ contract CommitRevealVoting {
     // ----------------
 
     /**
-    @dev Checks if an expiration date has been reached
-    @param _terminationDate Integer timestamp of date to compare current timestamp with
-    @return expired Boolean indication of whether the terminationDate has passed
+    * @dev Checks if an expiration date has been reached
+    * @param _terminationDate Integer timestamp of date to compare current timestamp with
+    * @return expired Boolean indication of whether the terminationDate has passed
     */
     function isExpired(uint _terminationDate) view public returns (bool expired) {
         return (block.timestamp > _terminationDate);
