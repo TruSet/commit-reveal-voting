@@ -14,9 +14,9 @@ contract CommitRevealVoting {
     // EVENTS:
     // ============
 
-    event _VoteCommitted(bytes32 indexed pollID, address indexed voter);
-    event _VoteRevealed(bytes32 indexed pollID, uint votesFor, uint votesAgainst, uint indexed choice, address indexed voter);
-    event _PollCreated(uint commitEndDate, uint revealEndDate, bytes32 indexed pollID, address creator);
+    event VoteCommitted(bytes32 indexed pollID, address indexed voter, bytes32 indexed secretHash);
+    event VoteRevealed(bytes32 indexed pollID, bytes32 indexed secretHash, uint indexed choice, address voter, address revealer, uint votesFor, uint votesAgainst);
+    event PollCreated(bytes32 indexed pollID, address creator, uint voteQuorum, uint commitEndDate, uint revealEndDate);
 
     // ============
     // DATA STRUCTURES:
@@ -76,7 +76,7 @@ contract CommitRevealVoting {
         commitHashes[_pollID][msg.sender] = _secretHash;
 
         pollMap[_pollID].didCommit[msg.sender] = true;
-        emit _VoteCommitted(_pollID, msg.sender);
+        emit VoteCommitted(_pollID, msg.sender, _secretHash);
     }
 
     /**
@@ -106,9 +106,10 @@ contract CommitRevealVoting {
     function revealVote(bytes32 _pollID, uint _voteOption, uint _salt) public {
         // Make sure the reveal period is active
         require(revealPeriodActive(_pollID));
-        require(pollMap[_pollID].didCommit[msg.sender]);                         // make sure user has committed a vote for this poll
-        require(!pollMap[_pollID].didReveal[msg.sender]);                        // prevent user from revealing multiple times
-        require(keccak256(abi.encodePacked(_voteOption, _salt)) == getCommitHash(msg.sender, _pollID)); // compare resultant hash from inputs to original commitHash
+        require(pollMap[_pollID].didCommit[msg.sender]); // make sure user has committed a vote for this poll
+        require(!pollMap[_pollID].didReveal[msg.sender]); // prevent user from revealing multiple times
+        bytes32 commitHash = getCommitHash(msg.sender, _pollID);
+        require(keccak256(abi.encodePacked(_voteOption, _salt)) == commitHash); // compare resultant hash from inputs to original commitHash
 
         if (_voteOption == 1) {
             pollMap[_pollID].votesFor += 1;
@@ -118,7 +119,7 @@ contract CommitRevealVoting {
 
         pollMap[_pollID].didReveal[msg.sender] = true;
 
-        emit _VoteRevealed(_pollID, pollMap[_pollID].votesFor, pollMap[_pollID].votesAgainst, _voteOption, msg.sender);
+        emit VoteRevealed(_pollID, commitHash, _voteOption, msg.sender, msg.sender, pollMap[_pollID].votesFor, pollMap[_pollID].votesAgainst);
     }
 
     /**
@@ -152,6 +153,7 @@ contract CommitRevealVoting {
     onlyAdmin
     returns (bytes32 pollID)
     {
+        // TODO: check that poll does not already exist, and that durations and quorum are within expected bounds
         // using safemath
         //uint commitEndDate = block.timestamp.add(_commitDuration);
         //uint revealEndDate = commitEndDate.add(_revealDuration);
@@ -166,7 +168,7 @@ contract CommitRevealVoting {
             votesAgainst: 0
         });
 
-        emit _PollCreated(commitEndDate, revealEndDate, _pollID, msg.sender);
+        emit PollCreated(_pollID, msg.sender, _voteQuorum, commitEndDate, revealEndDate);
         return _pollID;
     }
 
