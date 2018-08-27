@@ -42,7 +42,7 @@ contract('CommitRevealVoting', function (accounts) {
       let secretVote = utils.createVoteHash('1', defaultSalt)
       await crv.commitVote(pollID, secretVote)
 
-      let didCommit = await crv.didCommit.call(greg, pollID)
+      let didCommit = await crv.didCommit.call(pollID, greg)
       assert.equal(didCommit, true, 'user should be able to commit a vote')
     })
 
@@ -57,7 +57,7 @@ contract('CommitRevealVoting', function (accounts) {
 
       await crv.revealVote(pollID, '1', defaultSalt, { from: neil })
 
-      let didReveal = await crv.didReveal.call(neil, pollID)
+      let didReveal = await crv.didReveal.call(pollID, neil)
       assert.equal(didReveal, true, 'user should be able to reveal a vote')
     })
   })
