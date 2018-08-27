@@ -1,5 +1,7 @@
 pragma solidity ^0.4.8;
 import "./AbstractRBAC.sol";
+import "openzeppelin-solidity/contracts/math/SafeMath.sol";
+
 
 /**
 @title Commit-Reveal Voting scheme with permissioned participants
@@ -11,6 +13,7 @@ import "./AbstractRBAC.sol";
 //      fix comment formatting
 //      should we get rid of quorums and isPassed? THis logic can get more complex and can change, so may be better handled by applications.
 contract CommitRevealVoting {
+    using SafeMath for uint256;
     AbstractRBAC rbac;
 
     // ============
@@ -117,17 +120,18 @@ contract CommitRevealVoting {
         require(!didReveal(_pollID, msg.sender), "already revealed"); // prevent user from revealing multiple times
         bytes32 commitHash = getCommitHash(msg.sender, _pollID);
         require(keccak256(abi.encodePacked(_voteOption, _salt)) == commitHash, "The hash of the vote and salt (tighly packed in taht order) does not match the commitment"); // compare resultant hash from inputs to original commitHash
+        Poll storage p = pollMap[_pollID];
 
         if (_voteOption == VOTE_FOR) {
-            pollMap[_pollID].votesFor += 1;
+            p.votesFor = p.votesFor.add(1);
         } else {
-            pollMap[_pollID].votesAgainst += 1;
+            p.votesAgainst = p.votesAgainst.add(1);
         }
 
-        pollMap[_pollID].revealedVotes[msg.sender] = _voteOption;
-        pollMap[_pollID].didReveal[msg.sender] = true;
+        p.revealedVotes[msg.sender] = _voteOption;
+        p.didReveal[msg.sender] = true;
 
-        emit VoteRevealed(_pollID, commitHash, _voteOption, msg.sender, msg.sender, pollMap[_pollID].votesFor, pollMap[_pollID].votesAgainst);
+        emit VoteRevealed(_pollID, commitHash, _voteOption, msg.sender, msg.sender, p.votesFor, p.votesAgainst);
     }
 
     /**
@@ -164,11 +168,9 @@ contract CommitRevealVoting {
         require(!pollExists(_pollID), "no such poll");
         require(_commitDuration > 0 && _commitDuration <= MAX_COMMIT_DURATION_IN_SECONDS, "0 < commitDuration <= 365 days");
         require(_revealDuration > 0 && _revealDuration <= MAX_REVEAL_DURATION_IN_SECONDS, "0 < revealDuration <= 365 days");
-        //uint commitEndDate = block.timestamp.add(_commitDuration);
-        //uint revealEndDate = commitEndDate.add(_revealDuration);
-        uint commitEndDate = block.timestamp + _commitDuration;
+        uint commitEndDate = block.timestamp.add(_commitDuration);
+        uint revealEndDate = commitEndDate.add(_revealDuration);
         assert(commitEndDate > 0); // Redundant "Double Check" because we rely on a non-zero value implying poll existence
-        uint revealEndDate = commitEndDate + _revealDuration;
 
         pollMap[_pollID] = Poll({
             commitEndDate: commitEndDate, // Invariant: all (active or inactive) Polls have a non-zero commitEndDate
@@ -191,7 +193,7 @@ contract CommitRevealVoting {
         require(pollEnded(_pollID));
 
         Poll memory poll = pollMap[_pollID];
-        return (100 * poll.votesFor) > (poll.voteQuorum * (poll.votesFor + poll.votesAgainst));
+        return (poll.votesFor.mul(100) > (poll.voteQuorum.mul(poll.votesFor.add(poll.votesAgainst))));
     }
 
     // ----------------
