@@ -1,4 +1,4 @@
-pragma solidity ^0.4.8;
+pragma solidity ^0.4.24;
 import "./AbstractRBAC.sol";
 import "openzeppelin-solidity/contracts/math/SafeMath.sol";
 
@@ -9,11 +9,13 @@ import "openzeppelin-solidity/contracts/math/SafeMath.sol";
 // Adapted from "Partial-Lock-Commit-Reveal Voting scheme with ERC20 tokens" by Aspyn Palatnick, Cem Ozer, Yorke Rhodes
 */
 // TODO revealEndDate -> revealDuration (short circuited by complete reveal)
+//      RevealPeriodStarted events per Greg's API spec - probably doesn't make sense to make these here but could the instrument sensibly make some?
 //      allow you to start the reveal period from a function call
 //      fix comment formatting
 //      should we get rid of quorums and isPassed? THis logic can get more complex and can change, so may be better handled by applications.
+//      allow anyone to reveal someone else's vote
 contract CommitRevealVoting {
-    using SafeMath for uint256;
+    using SafeMath for uint;
     AbstractRBAC rbac;
 
     // ============
@@ -33,6 +35,7 @@ contract CommitRevealVoting {
         uint voteQuorum;    // number of votes required for a proposal to pass
         uint votesFor;	    // tally of votes supporting proposal
         uint votesAgainst;  // tally of votes countering proposal
+        uint votesCommittedButNotRevealed;        // tally of votes that have been committed but not revealed
         mapping(address => bool) didReveal;       // voter -> whether the voter's vote has been revealed
         mapping(address => bytes32) commitHashes; // voter -> voter's commitment to a vote
         mapping(address => uint) revealedVotes;   // voter -> voter's revealed vote (0=Against; 1=For)
@@ -83,7 +86,12 @@ contract CommitRevealVoting {
         // prevent user from committing a secretHash of 0
         require(_secretHash != 0);
 
-        pollMap[_pollID].commitHashes[msg.sender] = _secretHash;
+        Poll storage p = pollMap[_pollID];
+        if (p.commitHashes[msg.sender] == bytes32(0)) {
+            // This commitment has not already been counted
+            p.votesCommittedButNotRevealed = p.votesCommittedButNotRevealed.add(1);
+        }
+        p.commitHashes[msg.sender] = _secretHash;
 
         emit VoteCommitted(_pollID, msg.sender, _secretHash);
     }
@@ -118,9 +126,10 @@ contract CommitRevealVoting {
         require(_voteOption == VOTE_AGAINST || _voteOption == VOTE_FOR, "voteOption must be 0 or 1");
         require(didCommit(_pollID, msg.sender), "no commitment found"); // make sure user has committed a vote for this poll
         require(!didReveal(_pollID, msg.sender), "already revealed"); // prevent user from revealing multiple times
-        bytes32 commitHash = getCommitHash(msg.sender, _pollID);
-        require(keccak256(abi.encodePacked(_voteOption, _salt)) == commitHash, "The hash of the vote and salt (tighly packed in taht order) does not match the commitment"); // compare resultant hash from inputs to original commitHash
         Poll storage p = pollMap[_pollID];
+        bytes32 commitHash = p.commitHashes[msg.sender];
+        require(keccak256(abi.encodePacked(_voteOption, _salt)) == commitHash, "The hash of the vote and salt (tighly packed in taht order) does not match the commitment"); // compare resultant hash from inputs to original commitHash
+        require(p.votesCommittedButNotRevealed > 0);
 
         if (_voteOption == VOTE_FOR) {
             p.votesFor = p.votesFor.add(1);
@@ -130,6 +139,7 @@ contract CommitRevealVoting {
 
         p.revealedVotes[msg.sender] = _voteOption;
         p.didReveal[msg.sender] = true;
+        p.votesCommittedButNotRevealed = p.votesCommittedButNotRevealed.sub(1);
 
         emit VoteRevealed(_pollID, commitHash, _voteOption, msg.sender, msg.sender, p.votesFor, p.votesAgainst);
     }
@@ -177,7 +187,8 @@ contract CommitRevealVoting {
             revealEndDate: revealEndDate,
             voteQuorum: _voteQuorum,
             votesFor: 0,
-            votesAgainst: 0
+            votesAgainst: 0,
+            votesCommittedButNotRevealed: 0
         });
 
         emit PollCreated(_pollID, msg.sender, _voteQuorum, commitEndDate, revealEndDate);
@@ -201,17 +212,18 @@ contract CommitRevealVoting {
     // ----------------
 
     /**
-    @dev Gets the total winning and losing votes for reward distribution purposes
+    @dev Gets the vote counts for a poll
+         N.B. Any code wishing to apportion rewards on this basis should also ensure that the reveal period is over.
     @param _pollID Bytes32 identifier associated with target poll
-    @return Total number of winning votes and losing votes (in that order) for specified, already-ended poll
+    @return Total number of 'For' votes, 'Against' votes, and committed votes that were not revealed. (3 integers, in that order.)
     */
-    function getTotalNumberOfWinningVotes(bytes32 _pollID) view public returns (uint numWinningVotes, uint numLosingVotes) {
-        require(pollEnded(_pollID));
-
-        if (isPassed(_pollID))
-            return (pollMap[_pollID].votesFor, pollMap[_pollID].votesAgainst);
-        else
-            return (pollMap[_pollID].votesAgainst, pollMap[_pollID].votesFor);
+    function getVoteCounts(bytes32 _pollID) view public
+        returns (
+            uint numForVotes,
+            uint numAgainstVotes,
+            uint numCommittedButNotRevealedVotes) {
+        Poll memory p = pollMap[_pollID]; 
+        return (p.votesFor, p.votesAgainst,  p.votesCommittedButNotRevealed);
     }
 
     /**
@@ -221,7 +233,6 @@ contract CommitRevealVoting {
     */
     function pollEnded(bytes32 _pollID) view public returns (bool ended) {
         require(pollExists(_pollID));
-
         return isExpired(pollMap[_pollID].revealEndDate);
     }
 
@@ -233,7 +244,6 @@ contract CommitRevealVoting {
     */
     function commitPeriodActive(bytes32 _pollID) view public returns (bool active) {
         require(pollExists(_pollID));
-
         return !isExpired(pollMap[_pollID].commitEndDate);
     }
 
@@ -244,7 +254,6 @@ contract CommitRevealVoting {
     */
     function revealPeriodActive(bytes32 _pollID) view public returns (bool active) {
         require(pollExists(_pollID));
-
         return !isExpired(pollMap[_pollID].revealEndDate) && !commitPeriodActive(_pollID);
     }
 
@@ -316,7 +325,7 @@ contract CommitRevealVoting {
     @param _pollID Identifer associated with target poll
     @return Bytes32 hash property attached to target poll
     */
-    function getCommitHash(address _voter, bytes32 _pollID) view public returns (bytes32 commitHash) {
+    function getCommitHash(bytes32 _pollID, address _voter) view public returns (bytes32 commitHash) {
         return pollMap[_pollID].commitHashes[_voter];
     }
 

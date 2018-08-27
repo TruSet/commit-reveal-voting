@@ -24,6 +24,9 @@ contract('CommitRevealVoting', function (accounts) {
     let pollEnded = await crv.pollEnded.call(pollID)
     assert.equal(pollEnded, false, 'poll should be open')
 
+    let voteCounts = await crv.getVoteCounts.call(pollID)
+    expect(voteCounts.map(e => e.toNumber())).to.deep.equal([0,0,0])
+
     let commitPeriodActive = await crv.commitPeriodActive.call(pollID)
     assert.equal(commitPeriodActive, true, 'poll should be in the commit period')
 
@@ -42,6 +45,9 @@ contract('CommitRevealVoting', function (accounts) {
       let secretVote = utils.createVoteHash('1', defaultSalt)
       await crv.commitVote(pollID, secretVote)
 
+      let voteCounts = await crv.getVoteCounts.call(pollID)
+      expect(voteCounts.map(e => e.toNumber())).to.deep.equal([0,0,1])
+
       let didCommit = await crv.didCommit.call(pollID, greg)
       assert.equal(didCommit, true, 'user should be able to commit a vote')
     })
@@ -50,12 +56,18 @@ contract('CommitRevealVoting', function (accounts) {
       let secretVote = utils.createVoteHash('1', defaultSalt)
       await crv.commitVote(pollID, secretVote, { from: neil })
 
-      web3.currentProvider.send({jsonrpc: "2.0", method: "evm_increaseTime", params: [25*3600], id: 0})
+      await web3.currentProvider.send({jsonrpc: "2.0", method: "evm_increaseTime", params: [25*3600], id: 0})
 
       let revealPeriodActive = await crv.revealPeriodActive.call(pollID)
       assert.equal(revealPeriodActive, true, 'poll should enter the reveal period after 25 hours')
 
+      let voteCounts = await crv.getVoteCounts.call(pollID)
+      expect(voteCounts.map(e => e.toNumber())).to.deep.equal([0,0,2])
+
       await crv.revealVote(pollID, '1', defaultSalt, { from: neil })
+
+      voteCounts = await crv.getVoteCounts.call(pollID)
+      expect(voteCounts.map(e => e.toNumber())).to.deep.equal([1,0,1])
 
       let didReveal = await crv.didReveal.call(pollID, neil)
       assert.equal(didReveal, true, 'user should be able to reveal a vote')
