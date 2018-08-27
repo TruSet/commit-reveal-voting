@@ -12,7 +12,6 @@ import "openzeppelin-solidity/contracts/math/SafeMath.sol";
 //      RevealPeriodStarted events per Greg's API spec - probably doesn't make sense to make these here but could the instrument sensibly make some?
 //      allow you to start the reveal period from a function call
 //      fix comment formatting
-//      should we get rid of quorums and isPassed? THis logic can get more complex and can change, so may be better handled by applications.
 //      allow anyone to reveal someone else's vote
 contract CommitRevealVoting {
     using SafeMath for uint;
@@ -24,7 +23,7 @@ contract CommitRevealVoting {
 
     event VoteCommitted(bytes32 indexed pollID, address indexed voter, bytes32 indexed secretHash);
     event VoteRevealed(bytes32 indexed pollID, bytes32 indexed secretHash, uint indexed choice, address voter, address revealer, uint votesFor, uint votesAgainst);
-    event PollCreated(bytes32 indexed pollID, address creator, uint voteQuorum, uint commitEndDate, uint revealEndDate);
+    event PollCreated(bytes32 indexed pollID, address creator, uint commitEndDate, uint revealEndDate);
 
     // ============
     // DATA STRUCTURES:
@@ -32,7 +31,6 @@ contract CommitRevealVoting {
     struct Poll {
         uint commitEndDate; // expiration date of commit period for poll
         uint revealEndDate; // expiration date of reveal period for poll
-        uint voteQuorum;    // number of votes required for a proposal to pass
         uint votesFor;	    // tally of votes supporting proposal
         uint votesAgainst;  // tally of votes countering proposal
         uint votesCommittedButNotRevealed;        // tally of votes that have been committed but not revealed
@@ -167,11 +165,10 @@ contract CommitRevealVoting {
 
     /**
     @dev Initiates a poll with canonical configured parameters at pollID emitted by PollCreated event
-    @param _voteQuorum Type of majority (out of 100) that is necessary for poll to be successful
     @param _commitDuration Length of desired commit period in seconds
     @param _revealDuration Length of desired reveal period in seconds
     */
-    function startPoll(bytes32 _pollID, uint _voteQuorum, uint _commitDuration, uint _revealDuration) public 
+    function startPoll(bytes32 _pollID, uint _commitDuration, uint _revealDuration) public 
     onlyAdmin
     returns (bytes32 pollID)
     {
@@ -185,26 +182,13 @@ contract CommitRevealVoting {
         pollMap[_pollID] = Poll({
             commitEndDate: commitEndDate, // Invariant: all (active or inactive) Polls have a non-zero commitEndDate
             revealEndDate: revealEndDate,
-            voteQuorum: _voteQuorum,
             votesFor: 0,
             votesAgainst: 0,
             votesCommittedButNotRevealed: 0
         });
 
-        emit PollCreated(_pollID, msg.sender, _voteQuorum, commitEndDate, revealEndDate);
+        emit PollCreated(_pollID, msg.sender, commitEndDate, revealEndDate);
         return _pollID;
-    }
-
-    /**
-    @notice Determines if proposal has passed
-    @dev Check if votesFor out of totalVotes exceeds votesQuorum (requires pollEnded)
-    @param _pollID Identifer associated with target poll
-    */
-    function isPassed(bytes32 _pollID) view public returns (bool passed) {
-        require(pollEnded(_pollID));
-
-        Poll memory poll = pollMap[_pollID];
-        return (poll.votesFor.mul(100) > (poll.voteQuorum.mul(poll.votesFor.add(poll.votesAgainst))));
     }
 
     // ----------------
