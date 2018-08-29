@@ -1,12 +1,12 @@
 pragma solidity ^0.4.24;
 import "./AbstractRBAC.sol";
-import "./CommitRevealVotingInternal.sol";
+import "./CommitRevealVoting.sol";
 
 /**
 * @title Commit-Reveal Voting demo contract, using an RBAC to gate access to all state-changing functions
 * @author TruSet
 */
-contract TestCommitRevealVoting is CommitRevealVotingInternal {
+contract TestCommitRevealVoting is CommitRevealVoting {
     AbstractRBAC rbac;
 
     constructor(address _rbac) public {

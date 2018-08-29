@@ -16,7 +16,7 @@ import "openzeppelin-solidity/contracts/math/SafeMath.sol";
 //      RevealPeriodStarted events per Greg's API spec - probably doesn't make sense to make these here but could the instrument sensibly make some?
 //      allow you to start the reveal period from a function call
 //      maintain a list of voters for each poll, but never loop through it! We can safely return it in an external function.
-contract CommitRevealVotingInternal {
+contract CommitRevealVoting {
     using SafeMath for uint;
 
     // ============
