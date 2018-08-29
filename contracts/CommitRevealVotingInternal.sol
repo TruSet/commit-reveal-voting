@@ -15,7 +15,7 @@ import "openzeppelin-solidity/contracts/math/SafeMath.sol";
 // TODO revealEndDate -> revealDuration (short circuited by complete reveal)
 //      RevealPeriodStarted events per Greg's API spec - probably doesn't make sense to make these here but could the instrument sensibly make some?
 //      allow you to start the reveal period from a function call
-//      allow anyone to reveal someone else's vote
+//      maintain a list of voters for each poll, but never loop through it! We can safely return it in an external function.
 contract CommitRevealVotingInternal {
     using SafeMath for uint;
 
@@ -95,20 +95,20 @@ contract CommitRevealVotingInternal {
     }
 
     /**
-    * @notice Reveals vote with choice and secret salt used in generating commitHash to attribute committed tokens
-    * @param _pollID Identifer associated with target poll
-    * @param _voteOption Vote choice used to generate commitHash for associated poll
-    * @param _salt Secret number used to generate commitHash for associated poll
+    * @notice Reveals a vote. The vote choice and secret salt must correspond to a prior commitment.
+    * @param _pollID     Identifer associated with target poll
+    * @param _voter      The user who committed the vote
+    * @param _voteOption Vote choice (0 or 1)
+    * @param _salt       Secret number that was used to generate the vote commitment
     */
-    // TODO this function - or a new one - should take user address as an argument, allow you to reveal for anyone
-    function _revealVote(bytes32 _pollID, uint _voteOption, uint _salt) internal {
+    function _revealVote(bytes32 _pollID, address _voter, uint _voteOption, uint _salt) internal {
         // Make sure the reveal period is active
         require(revealPeriodActive(_pollID));
         require(_voteOption == VOTE_AGAINST || _voteOption == VOTE_FOR, "voteOption must be 0 or 1");
-        require(didCommit(_pollID, msg.sender), "no commitment found"); // make sure user has committed a vote for this poll
-        require(!didReveal(_pollID, msg.sender), "already revealed"); // prevent user from revealing multiple times
+        require(didCommit(_pollID, _voter), "no commitment found"); // make sure user has committed a vote for this poll
+        require(!didReveal(_pollID, _voter), "already revealed"); // prevent user from revealing multiple times
         Poll storage p = pollMap[_pollID];
-        bytes32 commitHash = p.commitHashes[msg.sender];
+        bytes32 commitHash = p.commitHashes[_voter];
         require(keccak256(abi.encodePacked(_voteOption, _salt)) == commitHash, "The hash of the vote and salt (tighly packed in taht order) does not match the commitment"); // compare resultant hash from inputs to original commitHash
         require(p.votesCommittedButNotRevealed > 0);
 
@@ -118,27 +118,31 @@ contract CommitRevealVotingInternal {
             p.votesAgainst = p.votesAgainst.add(1);
         }
 
-        p.revealedVotes[msg.sender] = _voteOption;
-        p.didReveal[msg.sender] = true;
+        p.revealedVotes[_voter] = _voteOption;
+        p.didReveal[_voter] = true;
         p.votesCommittedButNotRevealed = p.votesCommittedButNotRevealed.sub(1);
 
-        emit VoteRevealed(_pollID, commitHash, _voteOption, msg.sender, msg.sender, p.votesFor, p.votesAgainst);
+        emit VoteRevealed(_pollID, commitHash, _voteOption, _voter, msg.sender, p.votesFor, p.votesAgainst);
     }
 
     /**
-    * @notice             Reveals multiple votes with choices and secret salts used in generating commitHashes to attribute committed tokens
+    * @notice Reveals multiple votes. All input arrays must be the same length, and the four values at any given
+    *         array index constitute the information required to reveal a single vote (see `_revealVote` params)
     * @param _pollIDs     Array of identifers associated with target polls
-    * @param _voteOptions Array of vote choices used to verify commitHashes for associated polls
-    * @param _salts       Array of secret numbers used to verify commitHashes for associated polls
+    * @param _voters      Array of voter addresses
+    * @param _voteOptions Array of vote choices (each 0 or 1)
+    * @param _salts       Array of secret numbers that were used to generate the vote commitment
     */
-    function _revealVotes(bytes32[] _pollIDs, uint[] _voteOptions, uint[] _salts) internal {
-        // make sure the array lengths are all the same
-        require(_pollIDs.length == _voteOptions.length);
-        require(_pollIDs.length == _salts.length);
+    function _revealVotes(bytes32[] _pollIDs, address[] _voters, uint[] _voteOptions, uint[] _salts) internal {
+        // Make sure the array lengths are all the same
+        uint l = _pollIDs.length;
+        require(l == _voteOptions.length);
+        require(l == _salts.length);
+        require(l == _voters.length);
 
-        // loop through arrays, revealing each individual vote values
-        for (uint i = 0; i < _pollIDs.length; i++) {
-            _revealVote(_pollIDs[i], _voteOptions[i], _salts[i]);
+        // Loop through arrays, revealing each individual vote values
+        for (uint i = 0; i < l; i++) {
+            _revealVote(_pollIDs[i], _voters[i], _voteOptions[i], _salts[i]);
         }
     }
 
