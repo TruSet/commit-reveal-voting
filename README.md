@@ -9,4 +9,4 @@ A few differences from other commit-reveal implementations:
 - We allow anyone to reveal a vote if they know the correct salt. This opens up possibilities for a centralised (e.g. trusted system operator) or distributed (e.g. Shamir's Secret Sharing) vote revelation.
 - We index the contracts by a `bytes32` poll identifier. Inheriting contracts can use whatever index(es) they like and hash the ordered indexes into a unique `bytes32`.
 
-`CommitRevealVoting` gives an example of how to use `CommitRevealVotingInternal` with some naive whitelisting.
+`TestCommitRevealVoting` gives an example of how to use `CommitRevealVotingInternal` with some naive whitelisting.

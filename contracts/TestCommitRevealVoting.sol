@@ -6,10 +6,11 @@ import "./CommitRevealVotingInternal.sol";
 * @title Commit-Reveal Voting demo contract, using an RBAC to gate access to all state-changing functions
 * @author TruSet
 */
-contract CommitRevealVoting is CommitRevealVotingInternal {
+contract TestCommitRevealVoting is CommitRevealVotingInternal {
     AbstractRBAC rbac;
 
     constructor(address _rbac) public {
+      require(_rbac != address(0));
       rbac = AbstractRBAC(_rbac);
     }
 
@@ -42,7 +43,8 @@ contract CommitRevealVoting is CommitRevealVotingInternal {
     }
 
     /**
-    * @notice                 Commits votes using hashes (of each votes with a secret salt) to conceal votes until reveal
+    * @notice                 Commits multiple votes. All input arrays must be the same length, and the two values at any given
+    *                         array index must constitute the information required to commit a single vote (see `_commitVote` params)
     * @param _pollIDs         Array of identifers associated with target polls
     * @param _secretHashes    Array of keccak256 hashes of each choice and the corresponding secret salt (tightly packed in this order)
     */
