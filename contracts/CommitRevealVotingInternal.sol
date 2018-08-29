@@ -285,10 +285,6 @@ contract CommitRevealVotingInternal {
         return (_pollID != 0) && (pollMap[_pollID].commitEndDate > 0);
     }
 
-    // ---------------------------
-    // DOUBLE-LINKED-LIST HELPERS:
-    // ---------------------------
-
     /**
     * @dev Gets the bytes32 commitHash property of target poll
     * @param _voter Address of user to check against
