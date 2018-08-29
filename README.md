@@ -1,8 +1,12 @@
-This is a work in progress - it should should not be used
+**This is a work in progress - it should should not be used.**
 
-This is a generalized imlempentation of a commit reveal voting scheme
+`CommitRevealVotingInternal` is a generalized imlempentation of a commit reveal voting scheme. Only binary votes (e.g. Yes or No) are currently supported.
 
-A few differences from other implementations
-- We don't implement partial locking, using a KYC'ed whitelist to protect against sybil attacks instead
-- We allow anyone to reveal a vote if they have the correct salt, evetually planning to use Shamir's secret sharing to distribute the salts
-- We index the contracts by a bytes32 poll identifier
+A few differences from other commit-reveal implementations:
+
+- We don't implement partial locking. We assume that some form of whitelisting will be used to protect against sybil attacks.
+- `CommitRevealVotingInternal` itself does not expose state changing functions (they are `internal`). We assume that these will be wrapped in an inheriting contract, and that the inheriting contract will also handle the whitelisting.
+- We allow anyone to reveal a vote if they know the correct salt. This opens up possibilities for a centralised (e.g. trusted system operator) or distributed (e.g. Shamir's Secret Sharing) vote revelation.
+- We index the contracts by a `bytes32` poll identifier. Inheriting contracts can use whatever index(es) they like and hash the ordered indexes into a unique `bytes32`.
+
+`CommitRevealVoting` gives an example of how to use `CommitRevealVotingInternal` with some naive whitelisting.
