@@ -1,20 +1,23 @@
 pragma solidity ^0.4.24;
-import "./AbstractRBAC.sol";
 import "openzeppelin-solidity/contracts/math/SafeMath.sol";
 
 
 /**
-@title Commit-Reveal Voting scheme with permissioned participants
-@author TruSet
-// Adapted from "Partial-Lock-Commit-Reveal Voting scheme with ERC20 tokens" by Aspyn Palatnick, Cem Ozer, Yorke Rhodes
+* @title Commit-Reveal Voting logic for use/adaptation in commit-reveal voting contracts
+* @author TruSet
+* @dev The functions that change state are all internal, so to make use of this logic
+*      this contract must be subclassed and have some functions that change state exposed publically. It is anticipated
+*      that the public functions will need to be restricted in some way (e.g. whitelisting), which is out of the scope
+*      of this base contract.
 */
+// Initial implementaiton adapted from "Partial-Lock-Commit-Reveal Voting scheme with ERC20 tokens" by Aspyn Palatnick, Cem Ozer, Yorke Rhodes
+
 // TODO revealEndDate -> revealDuration (short circuited by complete reveal)
 //      RevealPeriodStarted events per Greg's API spec - probably doesn't make sense to make these here but could the instrument sensibly make some?
 //      allow you to start the reveal period from a function call
 //      allow anyone to reveal someone else's vote
-contract CommitRevealVoting {
+contract CommitRevealVotingInternal {
     using SafeMath for uint;
-    AbstractRBAC rbac;
 
     // ============
     // EVENTS:
@@ -42,27 +45,10 @@ contract CommitRevealVoting {
     // STATE VARIABLES:
     // ============
     mapping(bytes32 => Poll) public pollMap; // maps pollID to Poll struct
-
-    constructor(address _rbac) public {
-      rbac = AbstractRBAC(_rbac);
-    }
-
-    string public constant ROLE_ADMIN = "commit_reveal_admin";
-    string public constant ROLE_VOTE = "commit_reveal_vote";
     uint public constant MAX_COMMIT_DURATION_IN_SECONDS = 365 days;
     uint public constant MAX_REVEAL_DURATION_IN_SECONDS = 365 days;
     uint public constant VOTE_FOR = 1;
     uint public constant VOTE_AGAINST = 0;
-
-    modifier onlyAdmin() {
-      rbac.checkRole(msg.sender, ROLE_ADMIN);
-      _;
-    }
-
-    modifier onlyVoters() {
-      rbac.checkRole(msg.sender, ROLE_VOTE);
-      _;
-    }
 
     // =================
     // VOTING INTERFACE:
@@ -73,8 +59,7 @@ contract CommitRevealVoting {
     * @param _pollID Identifer associated with target poll
     * @param _secretHash Commit keccak256 hash of voter's choice and salt (tightly packed in this order)
     */
-    function commitVote(bytes32 _pollID, bytes32 _secretHash) public
-    onlyVoters
+    function _commitVote(bytes32 _pollID, bytes32 _secretHash) internal
     {
         require(commitPeriodActive(_pollID));
         // prevent user from committing to zero node placeholder
@@ -98,15 +83,14 @@ contract CommitRevealVoting {
     * @param _pollIDs         Array of identifers associated with target polls
     * @param _secretHashes    Array of commit keccak256 hashes of voter's choices and salts (tightly packed in this order)
     */
-    function commitVotes(bytes32[] _pollIDs, bytes32[] _secretHashes) external
-    onlyVoters
+    function _commitVotes(bytes32[] _pollIDs, bytes32[] _secretHashes) internal
     {
         // make sure the array lengths are all the same
         require(_pollIDs.length == _secretHashes.length);
 
         // loop through arrays, committing each individual vote values
         for (uint i = 0; i < _pollIDs.length; i++) {
-            commitVote(_pollIDs[i], _secretHashes[i]);
+            _commitVote(_pollIDs[i], _secretHashes[i]);
         }
     }
 
@@ -117,7 +101,7 @@ contract CommitRevealVoting {
     * @param _salt Secret number used to generate commitHash for associated poll
     */
     // TODO this function - or a new one - should take user address as an argument, allow you to reveal for anyone
-    function revealVote(bytes32 _pollID, uint _voteOption, uint _salt) public {
+    function _revealVote(bytes32 _pollID, uint _voteOption, uint _salt) internal {
         // Make sure the reveal period is active
         require(revealPeriodActive(_pollID));
         require(_voteOption == VOTE_AGAINST || _voteOption == VOTE_FOR, "voteOption must be 0 or 1");
@@ -147,14 +131,14 @@ contract CommitRevealVoting {
     * @param _voteOptions Array of vote choices used to verify commitHashes for associated polls
     * @param _salts       Array of secret numbers used to verify commitHashes for associated polls
     */
-    function revealVotes(bytes32[] _pollIDs, uint[] _voteOptions, uint[] _salts) external {
+    function _revealVotes(bytes32[] _pollIDs, uint[] _voteOptions, uint[] _salts) internal {
         // make sure the array lengths are all the same
         require(_pollIDs.length == _voteOptions.length);
         require(_pollIDs.length == _salts.length);
 
         // loop through arrays, revealing each individual vote values
         for (uint i = 0; i < _pollIDs.length; i++) {
-            revealVote(_pollIDs[i], _voteOptions[i], _salts[i]);
+            _revealVote(_pollIDs[i], _voteOptions[i], _salts[i]);
         }
     }
 
@@ -167,8 +151,7 @@ contract CommitRevealVoting {
     * @param _commitDuration Length of desired commit period in seconds
     * @param _revealDuration Length of desired reveal period in seconds
     */
-    function startPoll(bytes32 _pollID, uint _commitDuration, uint _revealDuration) public 
-    onlyAdmin
+    function _startPoll(bytes32 _pollID, uint _commitDuration, uint _revealDuration) internal 
     returns (bytes32 pollID)
     {
         require(!pollExists(_pollID), "no such poll");
@@ -196,7 +179,7 @@ contract CommitRevealVoting {
 
     /**
     * @dev Gets the vote counts for a poll
-    *      N.B. Any code wishing to apportion rewards on this basis should also ensure that the reveal period is over.
+    *      N.B. Ensure that the reveal period is over before assuming that these results are final.
     * @param _pollID Bytes32 identifier associated with target poll
     * @return Total number of 'For' votes, 'Against' votes, and committed votes that were not revealed. (3 integers, in that order.)
     */
@@ -265,7 +248,7 @@ contract CommitRevealVoting {
 
     /**
     * @dev Checks if user voted 'For' (i.e. affirmative) in a specified poll.
-    *      N.B. Any code wishing to apportion rewards on this basis should also ensure that the reveal period is over.
+    *      N.B. Ensure that the reveal period is over before assuming that these results are final.
     * @param _pollID Identifier associated with target poll
     * @param _voter Address of user to check
     * @return Boolean indication of whether user voted 'For'
@@ -278,7 +261,7 @@ contract CommitRevealVoting {
 
     /**
     * @dev Checks if user voted 'Against' in a specified poll
-    *      N.B. Any code wishing to apportion rewards on this basis should also ensure that the reveal period is over.
+    *      N.B. Ensure that the reveal period is over before assuming that these results are final.
     * @param _pollID Identifier associated with target poll
     * @param _voter Address of user to check
     * @return Boolean indication of whether user voted 'Against'
