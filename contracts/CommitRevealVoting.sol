@@ -251,29 +251,17 @@ contract CommitRevealVoting {
     }
 
     /**
-    * @dev Checks if user voted 'For' (i.e. affirmative) in a specified poll.
-    *      N.B. Ensure that the reveal period is over before assuming that these results are final.
+    * @dev Returns user's revealed vote value in a specified poll. Reverts if they did not
+    *      commit a vote or if they failed to reveal it.
     * @param _pollID Identifier associated with target poll
     * @param _voter Address of user to check
-    * @return Boolean indication of whether user voted 'For'
+    * @return The user's vote
     */
-    function didVoteFor(bytes32 _pollID, address _voter) view public returns (bool revealed) {
+    function getVote(bytes32 _pollID, address _voter) view public returns (uint vote) {
         require(pollExists(_pollID));
         require(!commitPeriodActive(_pollID));
-        return pollMap[_pollID].didReveal[_voter] && pollMap[_pollID].revealedVotes[_voter] == VOTE_FOR;
-    }
-
-    /**
-    * @dev Checks if user voted 'Against' in a specified poll
-    *      N.B. Ensure that the reveal period is over before assuming that these results are final.
-    * @param _pollID Identifier associated with target poll
-    * @param _voter Address of user to check
-    * @return Boolean indication of whether user voted 'Against'
-    */
-    function didVoteAgainst(bytes32 _pollID, address _voter) view public returns (bool revealed) {
-        require(pollExists(_pollID));
-        require(!commitPeriodActive(_pollID));
-        return pollMap[_pollID].didReveal[_voter] && pollMap[_pollID].revealedVotes[_voter] == VOTE_AGAINST;
+        require(didReveal(_pollID, _voter));
+        return pollMap[_pollID].revealedVotes[_voter];
     }
 
     /**
