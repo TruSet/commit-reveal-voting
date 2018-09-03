@@ -85,11 +85,8 @@ contract('TestCommitRevealVoting', function (accounts) {
       let didReveal = await crv.didReveal.call(pollID, neil)
       assert.equal(didReveal, true, 'user should be able to reveal a vote')
 
-      let votedFor = await crv.didVoteFor.call(pollID, neil)
-      assert.equal(votedFor, true, '\'user voted for\' tacked as expected')
-
-      let votedAgainst = await crv.didVoteAgainst.call(pollID, neil)
-      assert.equal(votedAgainst, false, '\'user voted against\' tacked as expected')
+      let vote = await crv.getVote.call(pollID, neil)
+      assert.equal(vote.toNumber(), 1, '\'user voted for\' tracked as expected')
     })
 
     it('allows anyone to reveal someone else\'s vote', async function() {
@@ -104,15 +101,13 @@ contract('TestCommitRevealVoting', function (accounts) {
       let didReveal = await crv.didReveal.call(pollID, greg)
       assert.equal(didReveal, true, 'greg\'s vote was revealed')
 
-      let votedFor = await crv.didVoteFor.call(pollID, greg)
-      assert.equal(votedFor, false, '\'user voted for\' tacked as expected')
-
-      let votedAgainst = await crv.didVoteAgainst.call(pollID, greg)
-      assert.equal(votedAgainst, true, '\'user voted against\' tacked as expected')
+      let vote = await crv.getVote.call(pollID, greg)
+      assert.equal(vote.toNumber(), 0, '\'user voted against\' tracked as expected')
     })
 
     // Tests TODO: committing multiple votes
     //             revealing multiple votes
     //             checking 
+    //             make tests independent
   })
 })
