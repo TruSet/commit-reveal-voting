@@ -39,6 +39,7 @@ contract CommitRevealVoting {
         mapping(address => bool) didReveal;       // voter -> whether the voter's vote has been revealed
         mapping(address => bytes32) commitHashes; // voter -> voter's commitment to a vote
         mapping(address => uint) revealedVotes;   // voter -> voter's revealed vote (0=Against; 1=For)
+        address[] voters;   // a list of the addresses who have committed (not necess revealed) a vote in this poll
     }
 
     // ============
@@ -72,6 +73,7 @@ contract CommitRevealVoting {
         if (p.commitHashes[msg.sender] == bytes32(0)) {
             // This commitment has not already been counted
             p.votesCommittedButNotRevealed = p.votesCommittedButNotRevealed.add(1);
+            p.voters.push(msg.sender);
         }
         p.commitHashes[msg.sender] = _secretHash;
 
@@ -170,7 +172,8 @@ contract CommitRevealVoting {
             revealEndDate: revealEndDate,
             votesFor: 0,
             votesAgainst: 0,
-            votesCommittedButNotRevealed: 0
+            votesCommittedButNotRevealed: 0,
+            voters: new address[](0)
         });
 
         emit PollCreated(_pollID, msg.sender, commitEndDate, revealEndDate);
@@ -194,6 +197,19 @@ contract CommitRevealVoting {
             uint numCommittedButNotRevealedVotes) {
         Poll memory p = pollMap[_pollID]; 
         return (p.votesFor, p.votesAgainst,  p.votesCommittedButNotRevealed);
+    }
+
+    /**
+    * @dev Gets the addresses that voted in a poll
+    *      Unless restrictions are added to the implementing contract,
+    *      the length of this list is unbounded and therefore unsuitable for examination on-chain.
+    *      Ensure that the commit period is over before assuming that this list is final.
+    * @param _pollID Bytes32 identifier associated with target poll
+    * @return The list of addresses that voted in the poll, regardless of whether or not they
+    *         revealed their vote. 
+    */
+    function getVoters(bytes32 _pollID) view public returns (address[] voters) {
+        return pollMap[_pollID].voters; 
     }
 
     /**
