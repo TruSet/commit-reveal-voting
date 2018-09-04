@@ -255,14 +255,13 @@ contract CommitRevealVoting {
     }
 
     /**
-    @dev Checks if user has already revealed for specified poll.
+    @dev Checks if user has already committed and revealed for specified poll.
     @param _pollID Identifier associated with target poll
     @param _voter Address of user to check
     @return Boolean indication of whether user has revealed
     */
     function didReveal(bytes32 _pollID, address _voter) view public returns (bool revealed) {
         require(pollExists(_pollID));
-        require(!commitPeriodActive(_pollID));
         return pollMap[_pollID].didReveal[_voter];
     }
 
