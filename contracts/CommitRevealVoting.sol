@@ -39,6 +39,7 @@ contract CommitRevealVoting {
         mapping(address => bool) didReveal;       // voter -> whether the voter's vote has been revealed
         mapping(address => bytes32) commitHashes; // voter -> voter's commitment to a vote
         mapping(address => uint) revealedVotes;   // voter -> voter's revealed vote (0=Against; 1=For)
+        address[] voters;   // a list of the addresses who have committed (not necess revealed) a vote in this poll
     }
 
     // ============
@@ -72,6 +73,7 @@ contract CommitRevealVoting {
         if (p.commitHashes[msg.sender] == bytes32(0)) {
             // This commitment has not already been counted
             p.votesCommittedButNotRevealed = p.votesCommittedButNotRevealed.add(1);
+            p.voters.push(msg.sender);
         }
         p.commitHashes[msg.sender] = _secretHash;
 
@@ -170,7 +172,8 @@ contract CommitRevealVoting {
             revealEndDate: revealEndDate,
             votesFor: 0,
             votesAgainst: 0,
-            votesCommittedButNotRevealed: 0
+            votesCommittedButNotRevealed: 0,
+            voters: new address[](0)
         });
 
         emit PollCreated(_pollID, msg.sender, commitEndDate, revealEndDate);
@@ -194,6 +197,19 @@ contract CommitRevealVoting {
             uint numCommittedButNotRevealedVotes) {
         Poll memory p = pollMap[_pollID]; 
         return (p.votesFor, p.votesAgainst,  p.votesCommittedButNotRevealed);
+    }
+
+    /**
+    * @dev Gets the addresses that voted in a poll
+    *      Unless restrictions are added to the implementing contract,
+    *      the length of this list is unbounded and therefore unsuitable for examination on-chain.
+    *      Ensure that the commit period is over before assuming that this list is final.
+    * @param _pollID Bytes32 identifier associated with target poll
+    * @return The list of addresses that voted in the poll, regardless of whether or not they
+    *         revealed their vote. 
+    */
+    function getVoters(bytes32 _pollID) view public returns (address[] voters) {
+        return pollMap[_pollID].voters; 
     }
 
     /**
@@ -239,41 +255,28 @@ contract CommitRevealVoting {
     }
 
     /**
-    @dev Checks if user has already revealed for specified poll.
+    @dev Checks if user has already committed and revealed for specified poll.
     @param _pollID Identifier associated with target poll
     @param _voter Address of user to check
     @return Boolean indication of whether user has revealed
     */
     function didReveal(bytes32 _pollID, address _voter) view public returns (bool revealed) {
         require(pollExists(_pollID));
-        require(!commitPeriodActive(_pollID));
         return pollMap[_pollID].didReveal[_voter];
     }
 
     /**
-    * @dev Checks if user voted 'For' (i.e. affirmative) in a specified poll.
-    *      N.B. Ensure that the reveal period is over before assuming that these results are final.
+    * @dev Returns user's revealed vote value in a specified poll. Reverts if they did not
+    *      commit a vote or if they failed to reveal it.
     * @param _pollID Identifier associated with target poll
     * @param _voter Address of user to check
-    * @return Boolean indication of whether user voted 'For'
+    * @return The user's vote
     */
-    function didVoteFor(bytes32 _pollID, address _voter) view public returns (bool revealed) {
+    function getVote(bytes32 _pollID, address _voter) view public returns (uint vote) {
         require(pollExists(_pollID));
         require(!commitPeriodActive(_pollID));
-        return pollMap[_pollID].didReveal[_voter] && pollMap[_pollID].revealedVotes[_voter] == VOTE_FOR;
-    }
-
-    /**
-    * @dev Checks if user voted 'Against' in a specified poll
-    *      N.B. Ensure that the reveal period is over before assuming that these results are final.
-    * @param _pollID Identifier associated with target poll
-    * @param _voter Address of user to check
-    * @return Boolean indication of whether user voted 'Against'
-    */
-    function didVoteAgainst(bytes32 _pollID, address _voter) view public returns (bool revealed) {
-        require(pollExists(_pollID));
-        require(!commitPeriodActive(_pollID));
-        return pollMap[_pollID].didReveal[_voter] && pollMap[_pollID].revealedVotes[_voter] == VOTE_AGAINST;
+        require(didReveal(_pollID, _voter));
+        return pollMap[_pollID].revealedVotes[_voter];
     }
 
     /**
