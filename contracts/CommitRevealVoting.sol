@@ -12,10 +12,11 @@ import "openzeppelin-solidity/contracts/math/SafeMath.sol";
 */
 // Initial implementaiton adapted from "Partial-Lock-Commit-Reveal Voting scheme with ERC20 tokens" by Aspyn Palatnick, Cem Ozer, Yorke Rhodes
 
-// TODO revealEndDate -> revealDuration (short circuited by complete reveal)
+// TODO revealDeadline -> revealDuration (short circuited by complete reveal)
 //      RevealPeriodStarted events per Greg's API spec - probably doesn't make sense to make these here but could the instrument sensibly make some?
 //      allow you to start the reveal period from a function call
-//      maintain a list of voters for each poll, but never loop through it! We can safely return it in an external function.
+//      allow you to end the reveal period from a function call
+//      place restrictions on who can start a new poll? I.e. instruments. Requires new RBAC role!
 contract CommitRevealVoting {
     using SafeMath for uint;
 
@@ -25,14 +26,14 @@ contract CommitRevealVoting {
 
     event VoteCommitted(bytes32 indexed pollID, address indexed voter, bytes32 indexed secretHash);
     event VoteRevealed(bytes32 indexed pollID, bytes32 indexed secretHash, uint indexed choice, address voter, address revealer, uint votesFor, uint votesAgainst);
-    event PollCreated(bytes32 indexed pollID, address creator, uint commitEndDate, uint revealEndDate);
+    event PollCreated(bytes32 indexed pollID, address creator, uint commitDeadline, uint revealDeadline);
 
     // ============
     // DATA STRUCTURES:
     // ============
     struct Poll {
-        uint commitEndDate; // expiration date of commit period for poll
-        uint revealEndDate; // expiration date of reveal period for poll
+        uint commitDeadline; // expiration date of commit period for poll
+        uint revealDeadline; // expiration date of reveal period for poll
         uint votesFor;	    // tally of votes supporting proposal
         uint votesAgainst;  // tally of votes countering proposal
         uint votesCommittedButNotRevealed;        // tally of votes that have been committed but not revealed
@@ -149,7 +150,7 @@ contract CommitRevealVoting {
     }
 
     // ==================
-    // POLLING INTERFACE:
+    // ADMIN INTERFACE:
     // ==================
 
     /**
@@ -163,20 +164,20 @@ contract CommitRevealVoting {
         require(!pollExists(_pollID), "no such poll");
         require(_commitDuration > 0 && _commitDuration <= MAX_COMMIT_DURATION_IN_SECONDS, "0 < commitDuration <= 365 days");
         require(_revealDuration > 0 && _revealDuration <= MAX_REVEAL_DURATION_IN_SECONDS, "0 < revealDuration <= 365 days");
-        uint commitEndDate = block.timestamp.add(_commitDuration);
-        uint revealEndDate = commitEndDate.add(_revealDuration);
-        assert(commitEndDate > 0); // Redundant "Double Check" because we rely on a non-zero value implying poll existence
+        uint commitDeadline = block.timestamp.add(_commitDuration);
+        uint revealDeadline = commitDeadline.add(_revealDuration);
+        assert(commitDeadline > 0); // Redundant "Double Check" because we rely on a non-zero value implying poll existence
 
         pollMap[_pollID] = Poll({
-            commitEndDate: commitEndDate, // Invariant: all (active or inactive) Polls have a non-zero commitEndDate
-            revealEndDate: revealEndDate,
+            commitDeadline: commitDeadline, // Invariant: all (active or inactive) Polls have a non-zero commitDeadline
+            revealDeadline: revealDeadline,
             votesFor: 0,
             votesAgainst: 0,
             votesCommittedButNotRevealed: 0,
             voters: new address[](0)
         });
 
-        emit PollCreated(_pollID, msg.sender, commitEndDate, revealEndDate);
+        emit PollCreated(_pollID, msg.sender, commitDeadline, revealDeadline);
         return _pollID;
     }
 
@@ -214,33 +215,33 @@ contract CommitRevealVoting {
 
     /**
     * @notice Determines if poll is over
-    * @dev Checks isExpired for specified poll's revealEndDate
+    * @dev Checks isExpired for specified poll's revealDeadline
     * @return Boolean indication of whether polling period is over
     */
     function pollEnded(bytes32 _pollID) view public returns (bool ended) {
         require(pollExists(_pollID));
-        return isExpired(pollMap[_pollID].revealEndDate);
+        return isExpired(pollMap[_pollID].revealDeadline);
     }
 
     /**
     * @notice Checks if the commit period is still active for the specified poll
-    * @dev Checks isExpired for the specified poll's commitEndDate
+    * @dev Checks isExpired for the specified poll's commitDeadline
     * @param _pollID Identifer associated with target poll
     * @return Boolean indication of isCommitPeriodActive for target poll
     */
     function commitPeriodActive(bytes32 _pollID) view public returns (bool active) {
         require(pollExists(_pollID));
-        return !isExpired(pollMap[_pollID].commitEndDate);
+        return !isExpired(pollMap[_pollID].commitDeadline);
     }
 
     /**
     * @notice Checks if the reveal period is still active for the specified poll
-    * @dev Checks isExpired for the specified poll's revealEndDate
+    * @dev Checks isExpired for the specified poll's revealDeadline
     * @param _pollID Identifer associated with target poll
     */
     function revealPeriodActive(bytes32 _pollID) view public returns (bool active) {
         require(pollExists(_pollID));
-        return !isExpired(pollMap[_pollID].revealEndDate) && !commitPeriodActive(_pollID);
+        return !isExpired(pollMap[_pollID].revealDeadline) && !commitPeriodActive(_pollID);
     }
 
     /**
@@ -285,7 +286,7 @@ contract CommitRevealVoting {
     * @return Boolean Indicates whether a poll exists for the provided pollID
     */
     function pollExists(bytes32 _pollID) view public returns (bool exists) {
-        return (_pollID != 0) && (pollMap[_pollID].commitEndDate > 0);
+        return (_pollID != 0) && (pollMap[_pollID].commitDeadline > 0);
     }
 
     /**
