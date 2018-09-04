@@ -88,7 +88,7 @@ contract TestCommitRevealVoting is CommitRevealVoting {
     }
 
     // ==================
-    // POLLING INTERFACE:
+    // ADMIN INTERFACE:
     // ==================
 
     /**
@@ -102,5 +102,25 @@ contract TestCommitRevealVoting is CommitRevealVoting {
     returns (bytes32 pollID)
     {
         return _startPoll(_pollID, _commitDuration, _revealDuration);
+    }
+
+    /**
+    * @dev Closes the reveal period, or reverts if it is not currently open
+    * @param _pollID Bytes32 identifier associated with target poll
+    */
+    function haltRevealPeriod(bytes32 _pollID) public 
+        onlyAdmin
+    {
+        return _haltRevealPeriod(_pollID);
+    }
+
+    /**
+    * @dev Closes the commit period, or reverts if it is not currently open
+    * @param _pollID Bytes32 identifier associated with target poll
+    */
+    function haltCommitPeriod(bytes32 _pollID) public 
+        onlyAdmin
+    {
+        return _haltCommitPeriod(_pollID);
     }
 }

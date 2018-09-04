@@ -27,15 +27,20 @@ contract CommitRevealVoting {
     event VoteCommitted(bytes32 indexed pollID, address indexed voter, bytes32 indexed secretHash);
     event VoteRevealed(bytes32 indexed pollID, bytes32 indexed secretHash, uint indexed choice, address voter, address revealer, uint votesFor, uint votesAgainst);
     event PollCreated(bytes32 indexed pollID, address creator, uint commitDeadline, uint revealDeadline);
+    event CommitPeriodHalted(bytes32 indexed pollID, address haltedBy, uint timestamp);
+    event RevealPeriodHalted(bytes32 indexed pollID, address haltedBy, uint timestamp);
 
     // ============
     // DATA STRUCTURES:
     // ============
     struct Poll {
-        uint commitDeadline; // expiration date of commit period for poll
-        uint revealDeadline; // expiration date of reveal period for poll
-        uint votesFor;	    // tally of votes supporting proposal
-        uint votesAgainst;  // tally of votes countering proposal
+        uint commitDeadline;  // the commit period will end at this time if it does not end earlier
+        uint commitsHaltedAt; // the time that the commit period ended, if different from commitDeadline
+        uint revealDuraton;   // the maxiumum amount of time (in seconds) to allow for vote revelation following the end of the commit period
+        uint revealDeadline;  // the reveal period will end at this time if it does not end earlier (subject to change if the commit period ends early)
+        uint revealsHaltedAt; // the time that the reveal period ended, if different from revealDeadline
+        uint votesFor;	      // tally of votes supporting proposal
+        uint votesAgainst;    // tally of votes countering proposal
         uint votesCommittedButNotRevealed;        // tally of votes that have been committed but not revealed
         mapping(address => bool) didReveal;       // voter -> whether the voter's vote has been revealed
         mapping(address => bytes32) commitHashes; // voter -> voter's commitment to a vote
@@ -169,8 +174,11 @@ contract CommitRevealVoting {
         assert(commitDeadline > 0); // Redundant "Double Check" because we rely on a non-zero value implying poll existence
 
         pollMap[_pollID] = Poll({
-            commitDeadline: commitDeadline, // Invariant: all (active or inactive) Polls have a non-zero commitDeadline
+            commitDeadline: commitDeadline, // Invariant: all existing (active or inactive) Polls have a non-zero commitDeadline
+            commitsHaltedAt: 0, 
+            revealDuraton: _revealDuration,
             revealDeadline: revealDeadline,
+            revealsHaltedAt: 0,
             votesFor: 0,
             votesAgainst: 0,
             votesCommittedButNotRevealed: 0,
@@ -179,6 +187,31 @@ contract CommitRevealVoting {
 
         emit PollCreated(_pollID, msg.sender, commitDeadline, revealDeadline);
         return _pollID;
+    }
+
+    /**
+    * @dev Closes the commit period, or reverts if it is not currently open. Adjsuts the deadline for
+    * the reveal period to keep the reveal period duration unchanged.
+    * @param _pollID Bytes32 identifier associated with target poll
+    */
+    function _haltCommitPeriod(bytes32 _pollID) internal 
+    {
+        require(commitPeriodActive(_pollID));
+        Poll storage p = pollMap[_pollID];
+        p.commitsHaltedAt = block.timestamp;
+        p.revealDeadline = block.timestamp.add(p.revealDuraton);
+        emit CommitPeriodHalted(_pollID, msg.sender, block.timestamp);
+    }
+
+    /**
+    * @dev Closes the reveal period, or reverts if it is not currently open
+    * @param _pollID Bytes32 identifier associated with target poll
+    */
+    function _haltRevealPeriod(bytes32 _pollID) internal 
+    {
+        require(revealPeriodActive(_pollID));
+        pollMap[_pollID].revealsHaltedAt = block.timestamp;
+        emit RevealPeriodHalted(_pollID, msg.sender, block.timestamp);
     }
 
     // ----------------
@@ -219,29 +252,32 @@ contract CommitRevealVoting {
     * @return Boolean indication of whether polling period is over
     */
     function pollEnded(bytes32 _pollID) view public returns (bool ended) {
-        require(pollExists(_pollID));
-        return isExpired(pollMap[_pollID].revealDeadline);
+        return !commitPeriodActive(_pollID) && !revealPeriodActive(_pollID);
     }
 
     /**
     * @notice Checks if the commit period is still active for the specified poll
-    * @dev Checks isExpired for the specified poll's commitDeadline
+    * @dev Checks the specified poll's commitDeadline, and for earlier manual halting of commits
     * @param _pollID Identifer associated with target poll
     * @return Boolean indication of isCommitPeriodActive for target poll
     */
     function commitPeriodActive(bytes32 _pollID) view public returns (bool active) {
         require(pollExists(_pollID));
-        return !isExpired(pollMap[_pollID].commitDeadline);
+        Poll memory p = pollMap[_pollID];
+        bool endedEarly = (p.commitsHaltedAt != 0);
+        return !endedEarly && !isExpired(p.commitDeadline);
     }
 
     /**
     * @notice Checks if the reveal period is still active for the specified poll
-    * @dev Checks isExpired for the specified poll's revealDeadline
+    * @dev Checks the specified poll's revealDeadline, and for earlier manual halting of reveals
     * @param _pollID Identifer associated with target poll
     */
     function revealPeriodActive(bytes32 _pollID) view public returns (bool active) {
         require(pollExists(_pollID));
-        return !isExpired(pollMap[_pollID].revealDeadline) && !commitPeriodActive(_pollID);
+        Poll memory p = pollMap[_pollID];
+        bool endedEarly = (p.revealsHaltedAt != 0);
+        return !endedEarly && !isExpired(p.revealDeadline) && !commitPeriodActive(_pollID);
     }
 
     /**
