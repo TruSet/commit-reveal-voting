@@ -3,10 +3,16 @@ const RBAC = artifacts.require('./test-contracts/TestRBAC.sol');
 const utils = require('./utils.js')
 
 contract('TestCommitRevealVoting', function (accounts) {
-  let [greg, neil] = accounts
+  assert.isAtLeast(accounts.length, 4)
+  let [admin, voter1, voter2, voter3] = accounts
   let crv;
   let rbac;
   let defaultSalt = '666';
+  let counter = 0
+
+  function getNewPollID() {
+    return 'testPoll' + counter++
+  }
 
   before(async function () {
     crv = await TestCommitRevealVoting.deployed()
@@ -18,7 +24,7 @@ contract('TestCommitRevealVoting', function (accounts) {
 
 
   it('creates a poll', async function () {
-    let pollID = 'testPoll'
+    let pollID = getNewPollID()
 
     let pollExists = await crv.pollExists(pollID)
     assert.equal(pollExists, false, 'poll does not exist before creation')
@@ -41,9 +47,11 @@ contract('TestCommitRevealVoting', function (accounts) {
   })
 
   describe('when a poll exists', function() {
-    let pollID = 'testPoll2'
 
-    before(async function () {
+    let pollID
+
+    beforeEach(async function () {
+      pollID = getNewPollID()
       await crv.startPoll(pollID, 24*60*60, 5*60*60)
     })
 
@@ -54,13 +62,50 @@ contract('TestCommitRevealVoting', function (accounts) {
       let voteCounts = await crv.getVoteCounts.call(pollID)
       expect(voteCounts.map(e => e.toNumber())).to.deep.equal([0,0,1])
 
-      let didCommit = await crv.didCommit.call(pollID, greg)
+      let didCommit = await crv.didCommit.call(pollID, admin)
       assert.equal(didCommit, true, 'user should be able to commit a vote')
     })
+  })
 
-    it('allows you to reveal your own vote', async function() {
+  describe('when a poll has committed votes', function() {
+
+    beforeEach(async function () {
+      pollID = getNewPollID()
+      await crv.startPoll(pollID, 24*60*60, 5*60*60)
+
+      let secretVote = utils.createVoteHash('0', defaultSalt)
+      await crv.commitVote(pollID, secretVote)
+
+      secretVote = utils.createVoteHash('1', defaultSalt)
+      await crv.commitVote(pollID, secretVote, { from: voter1 })
+    })
+
+    it('forbids vote revelation during the commit phase', async function() {
+      let voteCounts = await crv.getVoteCounts.call(pollID)
+      expect(voteCounts.map(e => e.toNumber())).to.deep.equal([0,0,2])
+
+      await utils.assertRevert(crv.revealVote(pollID, admin, 0, defaultSalt, { from: voter2 }))
+
+      voteCounts = await crv.getVoteCounts.call(pollID)
+      expect(voteCounts.map(e => e.toNumber())).to.deep.equal([0,0,2])
+    })
+
+    it('forbids further commits during the reveal phase', async function() {
+      await web3.currentProvider.send({jsonrpc: "2.0", method: "evm_increaseTime", params: [25*3600], id: 0})
+
+      let secretVote = utils.createVoteHash('0', defaultSalt)
+      await utils.assertRevert(crv.commitVote(pollID, secretVote, { from: voter2 }))
+
+      voteCounts = await crv.getVoteCounts.call(pollID)
+      expect(voteCounts.map(e => e.toNumber())).to.deep.equal([0,0,2])
+    })
+
+    it('allows you to reveal your own vote during the reveal phase', async function() {
+      let voteCounts = await crv.getVoteCounts.call(pollID)
+      expect(voteCounts.map(e => e.toNumber())).to.deep.equal([0,0,2])
+
       let secretVote = utils.createVoteHash('1', defaultSalt)
-      await crv.commitVote(pollID, secretVote, { from: neil })
+      await crv.commitVote(pollID, secretVote, { from: voter1 })
 
       let revealPeriodActive = await crv.revealPeriodActive.call(pollID)
       assert.equal(revealPeriodActive, false, 'poll should not be in the reveal period yet')
@@ -74,40 +119,45 @@ contract('TestCommitRevealVoting', function (accounts) {
       commitPeriodActive = await crv.commitPeriodActive.call(pollID)
       assert.equal(commitPeriodActive, false, 'poll should no longer be in the commit period')
 
-      let voteCounts = await crv.getVoteCounts.call(pollID)
+      voteCounts = await crv.getVoteCounts.call(pollID)
       expect(voteCounts.map(e => e.toNumber())).to.deep.equal([0,0,2])
 
-      await crv.revealMyVote(pollID, '1', defaultSalt, { from: neil })
+      await crv.revealMyVote(pollID, '1', defaultSalt, { from: voter1 })
 
       voteCounts = await crv.getVoteCounts.call(pollID)
       expect(voteCounts.map(e => e.toNumber())).to.deep.equal([1,0,1])
 
-      let didReveal = await crv.didReveal.call(pollID, neil)
+      let didReveal = await crv.didReveal.call(pollID, voter1)
       assert.equal(didReveal, true, 'user should be able to reveal a vote')
 
-      let vote = await crv.getVote.call(pollID, neil)
+      let vote = await crv.getVote.call(pollID, voter1)
       assert.equal(vote.toNumber(), 1, '\'user voted for\' tracked as expected')
     })
 
-    it('allows anyone to reveal someone else\'s vote', async function() {
-      let voteCounts = await crv.getVoteCounts.call(pollID)
-      expect(voteCounts.map(e => e.toNumber())).to.deep.equal([1,0,1])
+    it('allows anyone to reveal someone else\'s vote during the reveal phase', async function() {
+      await web3.currentProvider.send({jsonrpc: "2.0", method: "evm_increaseTime", params: [25*3600], id: 0})
 
-      await crv.revealVote(pollID, greg, 0, defaultSalt, { from: neil })
+      let voteCounts = await crv.getVoteCounts.call(pollID)
+      expect(voteCounts.map(e => e.toNumber())).to.deep.equal([0,0,2])
+
+      await crv.revealVote(pollID, admin, 0, defaultSalt, { from: voter1 })
 
       voteCounts = await crv.getVoteCounts.call(pollID)
-      expect(voteCounts.map(e => e.toNumber())).to.deep.equal([1,1,0])
+      expect(voteCounts.map(e => e.toNumber())).to.deep.equal([0,1,1])
 
-      let didReveal = await crv.didReveal.call(pollID, greg)
-      assert.equal(didReveal, true, 'greg\'s vote was revealed')
+      let didReveal = await crv.didReveal.call(pollID, admin)
+      assert.equal(didReveal, true, 'admin\'s vote was revealed')
 
-      let vote = await crv.getVote.call(pollID, greg)
+      let vote = await crv.getVote.call(pollID, admin)
       assert.equal(vote.toNumber(), 0, '\'user voted against\' tracked as expected')
     })
+    
+  })
 
-    // Tests TODO: committing multiple votes
+      // Tests TODO: committing multiple votes
     //             revealing multiple votes
     //             checking 
     //             make tests independent
-  })
+    //             verify expected events
+
 })
