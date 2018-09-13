@@ -26,7 +26,7 @@ contract CommitRevealVoting {
 
     event VoteCommitted(bytes32 indexed pollID, address indexed voter, bytes32 indexed secretHash);
     event VoteRevealed(bytes32 indexed pollID, bytes32 indexed secretHash, uint indexed choice, address voter, address revealer, uint votesFor, uint votesAgainst);
-    event PollCreated(bytes32 indexed pollID, address creator, uint commitDeadline, uint revealDeadline);
+    event PollCreated(bytes32 indexed pollID, address creator, uint commitDeadline, uint revealDuraton);
     event CommitPeriodHalted(bytes32 indexed pollID, address haltedBy, uint timestamp);
     event RevealPeriodHalted(bytes32 indexed pollID, address haltedBy, uint timestamp);
 
@@ -34,13 +34,14 @@ contract CommitRevealVoting {
     // DATA STRUCTURES:
     // ============
     struct Poll {
-        uint commitDeadline;  // the commit period will end at this time if it does not end earlier
-        uint commitsHaltedAt; // the time that the commit period ended, if different from commitDeadline
-        uint revealDuraton;   // the maxiumum amount of time (in seconds) to allow for vote revelation following the end of the commit period
-        uint revealDeadline;  // the reveal period will end at this time if it does not end earlier (subject to change if the commit period ends early)
-        uint revealsHaltedAt; // the time that the reveal period ended, if different from revealDeadline
-        uint votesFor;	      // tally of votes supporting proposal
-        uint votesAgainst;    // tally of votes countering proposal
+        uint commitPeriodStartedAt; // the poll was opened and the commit period started at this time
+        uint commitDeadline;        // if not 0, the commit period will end at this time if it is not halted earlier
+        uint commitsHaltedAt;       // the time that the commit period ended, if different from commitDeadline
+        uint revealDuraton;         // the maxiumum amount of time (in seconds) to allow for vote revelation following the end of the commit period, or zero to have no maximum
+        uint revealDeadline;        // if not 0, the reveal period will end at this time if it is not halted earlier (this value may change if the commit period is halted early)
+        uint revealsHaltedAt;       // the time that the reveal period ended, if different from revealDeadline
+        uint votesFor;	            // tally of votes supporting proposal
+        uint votesAgainst;          // tally of votes countering proposal
         uint votesCommittedButNotRevealed;        // tally of votes that have been committed but not revealed
         mapping(address => bool) didReveal;       // voter -> whether the voter's vote has been revealed
         mapping(address => bytes32) commitHashes; // voter -> voter's commitment to a vote
@@ -160,21 +161,30 @@ contract CommitRevealVoting {
 
     /**
     * @dev Initiates a poll with canonical configured parameters at pollID emitted by PollCreated event
-    * @param _commitDuration Length of desired commit period in seconds
-    * @param _revealDuration Length of desired reveal period in seconds
+    * @param _commitDuration Duration after which the commit period will end, in seconds.
+    *                        Or zero to have no fixed duration, relying only on _haltCommitPeriod
+    * @param _revealDuration Duration after which the reveal period will end, in seconds.
+    *                        Or zero to have no fixed duration, relying only on _haltRevealPeriod
     */
     function _startPoll(bytes32 _pollID, uint _commitDuration, uint _revealDuration) internal 
     returns (bytes32 pollID)
     {
         require(!pollExists(_pollID), "no such poll");
-        require(_commitDuration > 0 && _commitDuration <= MAX_COMMIT_DURATION_IN_SECONDS, "0 < commitDuration <= 365 days");
-        require(_revealDuration > 0 && _revealDuration <= MAX_REVEAL_DURATION_IN_SECONDS, "0 < revealDuration <= 365 days");
-        uint commitDeadline = block.timestamp.add(_commitDuration);
-        uint revealDeadline = commitDeadline.add(_revealDuration);
-        assert(commitDeadline > 0); // Redundant "Double Check" because we rely on a non-zero value implying poll existence
+        require(_commitDuration <= MAX_COMMIT_DURATION_IN_SECONDS, "commitDuration <= 365 days");
+        require(_revealDuration <= MAX_REVEAL_DURATION_IN_SECONDS, "revealDuration <= 365 days");
+        uint commitDeadline = 0;
+        uint revealDeadline = 0;
+
+        if (_commitDuration > 0) {
+            commitDeadline = block.timestamp.add(_commitDuration);
+        }
+        if (_revealDuration > 0) {
+            revealDeadline = commitDeadline.add(_revealDuration);
+        }
 
         pollMap[_pollID] = Poll({
-            commitDeadline: commitDeadline, // Invariant: all existing (active or inactive) Polls have a non-zero commitDeadline
+            commitPeriodStartedAt: block.timestamp, // Invariant: all existing (active or inactive) Polls have a non-zero commitPeriodStartedAt
+            commitDeadline: commitDeadline, 
             commitsHaltedAt: 0, 
             revealDuraton: _revealDuration,
             revealDeadline: revealDeadline,
@@ -185,7 +195,7 @@ contract CommitRevealVoting {
             voters: new address[](0)
         });
 
-        emit PollCreated(_pollID, msg.sender, commitDeadline, revealDeadline);
+        emit PollCreated(_pollID, msg.sender, commitDeadline, _revealDuration);
         return _pollID;
     }
 
@@ -199,7 +209,9 @@ contract CommitRevealVoting {
         require(commitPeriodActive(_pollID));
         Poll storage p = pollMap[_pollID];
         p.commitsHaltedAt = block.timestamp;
-        p.revealDeadline = block.timestamp.add(p.revealDuraton);
+        if (p.revealDuraton > 0) {
+            p.revealDeadline = block.timestamp.add(p.revealDuraton);
+        }
         emit CommitPeriodHalted(_pollID, msg.sender, block.timestamp);
     }
 
@@ -269,6 +281,16 @@ contract CommitRevealVoting {
     }
 
     /**
+    * @notice Returns the time at which a commit period started
+    * @param _pollID Identifer associated with target poll
+    * @return The timestamp at which the commit period started for the given poll
+    */
+    function commitPeriodStartedTimestamp(bytes32 _pollID) view public returns (uint timestamp) {
+        require(pollExists(_pollID));
+        return pollMap[_pollID].commitPeriodStartedAt;
+    }
+
+    /**
     * @notice Checks if the reveal period is still active for the specified poll
     * @dev Checks the specified poll's revealDeadline, and for earlier manual halting of reveals
     * @param _pollID Identifer associated with target poll
@@ -278,6 +300,24 @@ contract CommitRevealVoting {
         Poll memory p = pollMap[_pollID];
         bool endedEarly = (p.revealsHaltedAt != 0);
         return !endedEarly && !isExpired(p.revealDeadline) && !commitPeriodActive(_pollID);
+    }
+
+    /**
+    * @notice Returns the time at which a reveal period started
+    * @param _pollID Identifer associated with target poll
+    * @return The timestamp at which the reveal period started for the given poll, or zero if it has not yet started
+    */
+    function revealPeriodStartedTimestamp(bytes32 _pollID) view public returns (uint timestamp) {
+        require(pollExists(_pollID));
+        Poll memory p = pollMap[_pollID];
+
+        if (p.commitsHaltedAt != 0) {
+            timestamp = p.commitsHaltedAt;
+        } else {
+            timestamp = p.commitDeadline; // could be zero but that's OK
+        }
+
+        return timestamp;
     }
 
     /**
@@ -322,7 +362,7 @@ contract CommitRevealVoting {
     * @return Boolean Indicates whether a poll exists for the provided pollID
     */
     function pollExists(bytes32 _pollID) view public returns (bool exists) {
-        return (_pollID != 0) && (pollMap[_pollID].commitDeadline > 0);
+        return (_pollID != 0) && (pollMap[_pollID].commitPeriodStartedAt > 0);
     }
 
     /**
@@ -340,11 +380,11 @@ contract CommitRevealVoting {
     // ----------------
 
     /**
-    * @dev Checks if an expiration date has been reached
+    * @dev Checks if an expiration date has been reached. An expiration date of 0 will always return false.
     * @param _terminationDate Integer timestamp of date to compare current timestamp with
     * @return expired Boolean indication of whether the terminationDate has passed
     */
     function isExpired(uint _terminationDate) view public returns (bool expired) {
-        return (block.timestamp > _terminationDate);
+        return (_terminationDate > 0 && block.timestamp > _terminationDate);
     }
 }
