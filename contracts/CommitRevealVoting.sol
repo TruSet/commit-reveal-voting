@@ -366,13 +366,26 @@ contract CommitRevealVoting {
     *      commit a vote or if they failed to reveal it.
     * @param _pollID Identifier associated with target poll
     * @param _voter Address of user to check
-    * @return The user's vote
+    * @return Whether the user has voted, whether the user's vote has been revealed, and (if revealed) the vote itself
     */
-    function getVote(bytes32 _pollID, address _voter) view public returns (uint vote) {
-        require(pollExists(_pollID));
-        require(!commitPeriodActive(_pollID));
-        require(didReveal(_pollID, _voter));
-        return pollMap[_pollID].revealedVotes[_voter];
+    function getVote(bytes32 _pollID, address _voter) view public returns (
+      bool hasVoted,
+      bool hasRevealed,
+      uint vote
+    ) {
+      hasVoted = didCommit(_pollID, _voter);
+      hasRevealed = didReveal(_pollID, _voter);
+
+      if (hasVoted && hasRevealed) {
+        vote = pollMap[_pollID].revealedVotes[_voter];
+      }
+
+      return (
+        hasVoted,
+        hasRevealed,
+        vote
+      );
+
     }
 
     /**

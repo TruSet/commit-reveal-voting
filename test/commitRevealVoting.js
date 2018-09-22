@@ -59,14 +59,22 @@ contract('TestCommitRevealVoting', function (accounts) {
       let didCommit = await crv.didCommit.call(pollID, admin)
       assert.equal(didCommit, false, 'user has not yet committed')
 
+      let getVoteRes = await crv.getVote.call(pollID, admin)
+      assert.equal(getVoteRes[0], false, 'not committed')
+      assert.equal(getVoteRes[1], false, 'not yet revealed')
+
       let secretVote = utils.createVoteHash('0', defaultSalt)
       await crv.commitVote(pollID, secretVote)
 
       let voteCounts = await crv.getVoteCounts.call(pollID)
       expect(voteCounts.map(e => e.toNumber())).to.deep.equal([0,0,1])
-
+      
       didCommit = await crv.didCommit.call(pollID, admin)
       assert.equal(didCommit, true, 'user has committed')
+
+      getVoteRes = await crv.getVote.call(pollID, admin)
+      assert.equal(getVoteRes[0], true, 'committed')
+      assert.equal(getVoteRes[1], false, 'still not revealed')
     })
 
 
@@ -116,10 +124,10 @@ contract('TestCommitRevealVoting', function (accounts) {
       it('allows you to reveal your own after commit phase expires', async function() {
         let voteCounts = await crv.getVoteCounts.call(pollID)
         expect(voteCounts.map(e => e.toNumber())).to.deep.equal([0,0,2])
-  
+
         let secretVote = utils.createVoteHash('1', defaultSalt)
         await crv.commitVote(pollID, secretVote, { from: voter1 })
-  
+
         let revealPeriodActive = await crv.revealPeriodActive.call(pollID)
         assert.equal(revealPeriodActive, false, 'poll should not be in the reveal period yet')
         let commitPeriodActive = await crv.commitPeriodActive.call(pollID)
@@ -143,7 +151,14 @@ contract('TestCommitRevealVoting', function (accounts) {
         let didReveal = await crv.didReveal.call(pollID, voter1)
         assert.equal(didReveal, true, 'user should be able to reveal a vote')
   
-        let vote = await crv.getVote.call(pollID, voter1)
+        let getVoteRes = await crv.getVote.call(pollID, voter1)
+        assert.equal(getVoteRes[0], true, '\'user committed\' tracked as expected')
+        assert.equal(getVoteRes[1], true, '\'user revealed\' tracked as expected')
+        assert.equal(getVoteRes[2].toNumber(), 1, '\'user voted for\' tracked as expected')
+
+        let [committed, revealed, vote] = await crv.getVote.call(pollID, voter1)
+        assert.equal(committed, true, '\'user committed\' tracked as expected')
+        assert.equal(revealed, true, '\'user revealed\' tracked as expected')
         assert.equal(vote.toNumber(), 1, '\'user voted for\' tracked as expected')
       })
   
@@ -177,7 +192,7 @@ contract('TestCommitRevealVoting', function (accounts) {
         let didReveal = await crv.didReveal.call(pollID, voter1)
         assert.equal(didReveal, true, 'user should be able to reveal a vote')
   
-        let vote = await crv.getVote.call(pollID, voter1)
+        let [committed, revealed, vote] = await crv.getVote.call(pollID, voter1)
         assert.equal(vote.toNumber(), 1, '\'user voted for\' tracked as expected')
       })
   
@@ -198,7 +213,7 @@ contract('TestCommitRevealVoting', function (accounts) {
         didReveal = await crv.didReveal.call(pollID, admin)
         assert.equal(didReveal, true, 'admin\'s vote was revealed')
   
-        let vote = await crv.getVote.call(pollID, admin)
+        let [committed, revealed, vote] = await crv.getVote.call(pollID, admin)
         assert.equal(vote.toNumber(), 0, '\'user voted against\' tracked as expected')
       })
   
@@ -219,7 +234,7 @@ contract('TestCommitRevealVoting', function (accounts) {
         didReveal = await crv.didReveal.call(pollID, admin)
         assert.equal(didReveal, true, 'admin\'s vote was revealed')
   
-        let vote = await crv.getVote.call(pollID, admin)
+        let [committed, revealed, vote] = await crv.getVote.call(pollID, admin)
         assert.equal(vote.toNumber(), 0, '\'user voted against\' tracked as expected')
       })
   
@@ -236,7 +251,7 @@ contract('TestCommitRevealVoting', function (accounts) {
         let didReveal = await crv.didReveal.call(pollID, admin)
         assert.equal(didReveal, true, 'admin\'s vote was revealed')
   
-        let vote = await crv.getVote.call(pollID, admin)
+        let [committed, revealed, vote] = await crv.getVote.call(pollID, admin)
         assert.equal(vote.toNumber(), 0, '\'user voted against\' tracked as expected')
       })
       
@@ -283,7 +298,7 @@ contract('TestCommitRevealVoting', function (accounts) {
       it('returns the expected vote results', async function() {
         let votePromises = [admin, voter1, voter2].map(acc => crv.getVote.call(pollID, acc))
         let votes = await Promise.all(votePromises)
-        expect(votes.map(e => e.toNumber())).to.deep.equal([0,1,1])
+        expect(votes.map(e => e[2].toNumber())).to.deep.equal([0,1,1])
       })
       
       it('returns the expected vote counts', async function() {
@@ -722,11 +737,11 @@ contract('TestCommitRevealVoting', function (accounts) {
 
       // check votes
       let vote = await crv.getVote.call(pollID1, admin)
-      assert.equal(vote.toNumber(), 1, 'expected vote for poll 1')
+      assert.equal(vote[2].toNumber(), 1, 'expected vote for poll 1')
       vote = await crv.getVote.call(pollID2, admin)
-      assert.equal(vote.toNumber(), 0, 'expected vote for poll 2')
+      assert.equal(vote[2].toNumber(), 0, 'expected vote for poll 2')
       vote = await crv.getVote.call(pollID3, voter1)
-      assert.equal(vote.toNumber(), 1, 'expected vote for poll 3')
+      assert.equal(vote[2].toNumber(), 1, 'expected vote for poll 3')
     })
 
     it('allows you to reveal multiple votes in one trx (multiple votes per poll)', async function() {
@@ -765,17 +780,17 @@ contract('TestCommitRevealVoting', function (accounts) {
 
       // check votes
       let vote = await crv.getVote.call(pollID1, admin)
-      assert.equal(vote.toNumber(), 1, 'expected vote for admin@1')
+      assert.equal(vote[2].toNumber(), 1, 'expected vote for admin@1')
       vote = await crv.getVote.call(pollID1, voter1)
-      assert.equal(vote.toNumber(), 1, 'expected vote for voter1@1')
+      assert.equal(vote[2].toNumber(), 1, 'expected vote for voter1@1')
       vote = await crv.getVote.call(pollID2, admin)
-      assert.equal(vote.toNumber(), 0, 'expected vote for admin@2')
+      assert.equal(vote[2].toNumber(), 0, 'expected vote for admin@2')
       vote = await crv.getVote.call(pollID3, admin)
-      assert.equal(vote.toNumber(), 1, 'expected vote for admin@3')
+      assert.equal(vote[2].toNumber(), 1, 'expected vote for admin@3')
       vote = await crv.getVote.call(pollID3, voter1)
-      assert.equal(vote.toNumber(), 0, 'expected vote for voter1@3')
+      assert.equal(vote[2].toNumber(), 0, 'expected vote for voter1@3')
       vote = await crv.getVote.call(pollID3, voter2)
-      assert.equal(vote.toNumber(), 1, 'expected vote for voter2@3')
+      assert.equal(vote[2].toNumber(), 1, 'expected vote for voter2@3')
     })
   })
 
