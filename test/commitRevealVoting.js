@@ -143,7 +143,7 @@ contract('TestCommitRevealVoting', function (accounts) {
       let didReveal = await crv.didReveal.call(pollID, voter1)
       assert.equal(didReveal, true, 'user should be able to reveal a vote')
 
-      let vote = await crv.getVote.call(pollID, voter1)
+      let [hasCommitted, hasRevealed, vote] = await crv.getVote.call(pollID, voter1)
       assert.equal(vote.toNumber(), 1, '\'user voted for\' tracked as expected')
     })
 
@@ -177,7 +177,7 @@ contract('TestCommitRevealVoting', function (accounts) {
       let didReveal = await crv.didReveal.call(pollID, voter1)
       assert.equal(didReveal, true, 'user should be able to reveal a vote')
 
-      let vote = await crv.getVote.call(pollID, voter1)
+      let [hasCommitted, hasRevealed, vote] = await crv.getVote.call(pollID, voter1)
       assert.equal(vote.toNumber(), 1, '\'user voted for\' tracked as expected')
     })
 
@@ -198,7 +198,7 @@ contract('TestCommitRevealVoting', function (accounts) {
       didReveal = await crv.didReveal.call(pollID, admin)
       assert.equal(didReveal, true, 'admin\'s vote was revealed')
 
-      let vote = await crv.getVote.call(pollID, admin)
+      let [hasCommitted, hasRevealed, vote] = await crv.getVote.call(pollID, admin)
       assert.equal(vote.toNumber(), 0, '\'user voted against\' tracked as expected')
     })
 
@@ -219,7 +219,7 @@ contract('TestCommitRevealVoting', function (accounts) {
       didReveal = await crv.didReveal.call(pollID, admin)
       assert.equal(didReveal, true, 'admin\'s vote was revealed')
 
-      let vote = await crv.getVote.call(pollID, admin)
+      let [hasCommitted, hasRevealed, vote] = await crv.getVote.call(pollID, admin)
       assert.equal(vote.toNumber(), 0, '\'user voted against\' tracked as expected')
     })
 
@@ -236,7 +236,7 @@ contract('TestCommitRevealVoting', function (accounts) {
       let didReveal = await crv.didReveal.call(pollID, admin)
       assert.equal(didReveal, true, 'admin\'s vote was revealed')
 
-      let vote = await crv.getVote.call(pollID, admin)
+      let [hasCommitted, hasRevealed, vote] = await crv.getVote.call(pollID, admin)
       assert.equal(vote.toNumber(), 0, '\'user voted against\' tracked as expected')
     })
     
