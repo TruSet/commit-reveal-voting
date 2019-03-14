@@ -1,6 +1,8 @@
 const TestCommitRevealVoting = artifacts.require('./TestCommitRevealVoting.sol');
 const RBAC = artifacts.require('./test-contracts/TestRBAC.sol');
 const utils = require('./utils.js')
+const web3Utils = require('web3-utils')
+const { promisify } = require('util');
 
 contract('TestCommitRevealVoting', function (accounts) {
   assert.isAtLeast(accounts.length, 4)
@@ -11,7 +13,8 @@ contract('TestCommitRevealVoting', function (accounts) {
   let counter = 0
 
   function getNewPollID() {
-    return 'testPoll' + counter++
+    counter = counter + 1
+    return web3Utils.soliditySha3('testPoll' + counter)
   }
 
   before(async function () {
@@ -37,7 +40,10 @@ contract('TestCommitRevealVoting', function (accounts) {
     assert.equal(pollEnded, false, 'poll should be open')
 
     let voteCounts = await crv.getVoteCounts.call(pollID)
-    expect(voteCounts.map(e => e.toNumber())).to.deep.equal([0,0,0])
+    expect(voteCounts.numForVotes.toNumber()).to.equal(0)
+    expect(voteCounts.numAgainstVotes.toNumber()).to.equal(0)
+    expect(voteCounts.numCommittedButNotRevealedVotes.toNumber()).to.equal(0)
+
 
     let commitPeriodActive = await crv.commitPeriodActive.call(pollID)
     assert.equal(commitPeriodActive, true, 'poll should be in the commit period')
@@ -67,8 +73,11 @@ contract('TestCommitRevealVoting', function (accounts) {
       await crv.commitVote(pollID, secretVote)
 
       let voteCounts = await crv.getVoteCounts.call(pollID)
-      expect(voteCounts.map(e => e.toNumber())).to.deep.equal([0,0,1])
-      
+      expect(voteCounts.numForVotes.toNumber()).to.equal(0)
+      expect(voteCounts.numAgainstVotes.toNumber()).to.equal(0)
+      expect(voteCounts.numCommittedButNotRevealedVotes.toNumber()).to.equal(1)
+
+
       didCommit = await crv.didCommit.call(pollID, admin)
       assert.equal(didCommit, true, 'user has committed')
 
@@ -93,22 +102,28 @@ contract('TestCommitRevealVoting', function (accounts) {
   
       it('forbids vote revelation during the commit phase', async function() {
         let voteCounts = await crv.getVoteCounts.call(pollID)
-        expect(voteCounts.map(e => e.toNumber())).to.deep.equal([0,0,2])
+        expect(voteCounts.numForVotes.toNumber()).to.equal(0)
+        expect(voteCounts.numAgainstVotes.toNumber()).to.equal(0)
+        expect(voteCounts.numCommittedButNotRevealedVotes.toNumber()).to.equal(2)
   
         await utils.assertRevert(crv.revealVote(pollID, admin, 0, defaultSalt, { from: voter2 }))
   
         voteCounts = await crv.getVoteCounts.call(pollID)
-        expect(voteCounts.map(e => e.toNumber())).to.deep.equal([0,0,2])
+        expect(voteCounts.numForVotes.toNumber()).to.equal(0)
+        expect(voteCounts.numAgainstVotes.toNumber()).to.equal(0)
+        expect(voteCounts.numCommittedButNotRevealedVotes.toNumber()).to.equal(2)
       })
   
       it('forbids further commits after commit phase expires', async function() {
-        await web3.currentProvider.send({jsonrpc: "2.0", method: "evm_increaseTime", params: [25*3600], id: 0})
+        await promisify(web3.currentProvider.send)({jsonrpc: "2.0", method: "evm_increaseTime", params: [25*3600], id: 0})
   
         let secretVote = utils.createVoteHash('0', defaultSalt)
         await utils.assertRevert(crv.commitVote(pollID, secretVote, { from: voter2 }))
   
         voteCounts = await crv.getVoteCounts.call(pollID)
-        expect(voteCounts.map(e => e.toNumber())).to.deep.equal([0,0,2])
+        expect(voteCounts.numForVotes.toNumber()).to.equal(0)
+        expect(voteCounts.numAgainstVotes.toNumber()).to.equal(0)
+        expect(voteCounts.numCommittedButNotRevealedVotes.toNumber()).to.equal(2)
       })
   
       it('forbids further commits after commit phase is halted', async function() {
@@ -118,12 +133,16 @@ contract('TestCommitRevealVoting', function (accounts) {
         await utils.assertRevert(crv.commitVote(pollID, secretVote, { from: voter2 }))
   
         voteCounts = await crv.getVoteCounts.call(pollID)
-        expect(voteCounts.map(e => e.toNumber())).to.deep.equal([0,0,2])
+        expect(voteCounts.numForVotes.toNumber()).to.equal(0)
+        expect(voteCounts.numAgainstVotes.toNumber()).to.equal(0)
+        expect(voteCounts.numCommittedButNotRevealedVotes.toNumber()).to.equal(2)
       })
   
       it('allows you to reveal your own after commit phase expires', async function() {
         let voteCounts = await crv.getVoteCounts.call(pollID)
-        expect(voteCounts.map(e => e.toNumber())).to.deep.equal([0,0,2])
+        expect(voteCounts.numForVotes.toNumber()).to.equal(0)
+        expect(voteCounts.numAgainstVotes.toNumber()).to.equal(0)
+        expect(voteCounts.numCommittedButNotRevealedVotes.toNumber()).to.equal(2)
 
         let secretVote = utils.createVoteHash('1', defaultSalt)
         await crv.commitVote(pollID, secretVote, { from: voter1 })
@@ -133,7 +152,7 @@ contract('TestCommitRevealVoting', function (accounts) {
         let commitPeriodActive = await crv.commitPeriodActive.call(pollID)
         assert.equal(commitPeriodActive, true, 'poll should be in the commit period')
   
-        await web3.currentProvider.send({jsonrpc: "2.0", method: "evm_increaseTime", params: [25*3600], id: 0})
+        await promisify(web3.currentProvider.send)({jsonrpc: "2.0", method: "evm_increaseTime", params: [25*3600], id: 0})
   
         revealPeriodActive = await crv.revealPeriodActive.call(pollID)
         assert.equal(revealPeriodActive, true, 'poll should enter the reveal period after 25 hours')
@@ -141,30 +160,31 @@ contract('TestCommitRevealVoting', function (accounts) {
         assert.equal(commitPeriodActive, false, 'poll should no longer be in the commit period')
   
         voteCounts = await crv.getVoteCounts.call(pollID)
-        expect(voteCounts.map(e => e.toNumber())).to.deep.equal([0,0,2])
+        expect(voteCounts.numForVotes.toNumber()).to.equal(0)
+        expect(voteCounts.numAgainstVotes.toNumber()).to.equal(0)
+        expect(voteCounts.numCommittedButNotRevealedVotes.toNumber()).to.equal(2)
   
         await crv.revealMyVote(pollID, '1', defaultSalt, { from: voter1 })
   
         voteCounts = await crv.getVoteCounts.call(pollID)
-        expect(voteCounts.map(e => e.toNumber())).to.deep.equal([1,0,1])
+        expect(voteCounts.numForVotes.toNumber()).to.equal(1)
+        expect(voteCounts.numAgainstVotes.toNumber()).to.equal(0)
+        expect(voteCounts.numCommittedButNotRevealedVotes.toNumber()).to.equal(1)
   
         let didReveal = await crv.didReveal.call(pollID, voter1)
         assert.equal(didReveal, true, 'user should be able to reveal a vote')
   
-        let getVoteRes = await crv.getVote.call(pollID, voter1)
-        assert.equal(getVoteRes[0], true, '\'user committed\' tracked as expected')
-        assert.equal(getVoteRes[1], true, '\'user revealed\' tracked as expected')
-        assert.equal(getVoteRes[2].toNumber(), 1, '\'user voted for\' tracked as expected')
-
-        let [committed, revealed, vote] = await crv.getVote.call(pollID, voter1)
-        assert.equal(committed, true, '\'user committed\' tracked as expected')
-        assert.equal(revealed, true, '\'user revealed\' tracked as expected')
+        let {hasVoted, hasRevealed, vote} = await crv.getVote.call(pollID, voter1)
+        assert.equal(hasVoted, true, '\'user committed\' tracked as expected')
+        assert.equal(hasRevealed, true, '\'user revealed\' tracked as expected')
         assert.equal(vote.toNumber(), 1, '\'user voted for\' tracked as expected')
       })
   
       it('allows you to reveal your own after commit phase is halted', async function() {
         let voteCounts = await crv.getVoteCounts.call(pollID)
-        expect(voteCounts.map(e => e.toNumber())).to.deep.equal([0,0,2])
+        expect(voteCounts.numForVotes.toNumber()).to.equal(0)
+        expect(voteCounts.numAgainstVotes.toNumber()).to.equal(0)
+        expect(voteCounts.numCommittedButNotRevealedVotes.toNumber()).to.equal(2)
   
         let secretVote = utils.createVoteHash('1', defaultSalt)
         await crv.commitVote(pollID, secretVote, { from: voter1 })
@@ -182,25 +202,31 @@ contract('TestCommitRevealVoting', function (accounts) {
         assert.equal(commitPeriodActive, false, 'poll should no longer be in the commit period')
   
         voteCounts = await crv.getVoteCounts.call(pollID)
-        expect(voteCounts.map(e => e.toNumber())).to.deep.equal([0,0,2])
+        expect(voteCounts.numForVotes.toNumber()).to.equal(0)
+        expect(voteCounts.numAgainstVotes.toNumber()).to.equal(0)
+        expect(voteCounts.numCommittedButNotRevealedVotes.toNumber()).to.equal(2)
   
         await crv.revealMyVote(pollID, '1', defaultSalt, { from: voter1 })
   
         voteCounts = await crv.getVoteCounts.call(pollID)
-        expect(voteCounts.map(e => e.toNumber())).to.deep.equal([1,0,1])
+        expect(voteCounts.numForVotes.toNumber()).to.equal(1)
+        expect(voteCounts.numAgainstVotes.toNumber()).to.equal(0)
+        expect(voteCounts.numCommittedButNotRevealedVotes.toNumber()).to.equal(1)
   
         let didReveal = await crv.didReveal.call(pollID, voter1)
         assert.equal(didReveal, true, 'user should be able to reveal a vote')
   
-        let [committed, revealed, vote] = await crv.getVote.call(pollID, voter1)
+        let { vote } = await crv.getVote.call(pollID, voter1)
         assert.equal(vote.toNumber(), 1, '\'user voted for\' tracked as expected')
       })
   
       it('allows anyone to reveal someone else\'s vote after commit phase expires', async function() {
-        await web3.currentProvider.send({jsonrpc: "2.0", method: "evm_increaseTime", params: [25*3600], id: 0})
+        await promisify(web3.currentProvider.send)({jsonrpc: "2.0", method: "evm_increaseTime", params: [25*3600], id: 0})
   
         let voteCounts = await crv.getVoteCounts.call(pollID)
-        expect(voteCounts.map(e => e.toNumber())).to.deep.equal([0,0,2])
+        expect(voteCounts.numForVotes.toNumber()).to.equal(0)
+        expect(voteCounts.numAgainstVotes.toNumber()).to.equal(0)
+        expect(voteCounts.numCommittedButNotRevealedVotes.toNumber()).to.equal(2)
   
         let didReveal = await crv.didReveal.call(pollID, admin)
         assert.equal(didReveal, false, 'admin\'s vote was not revealed yet')
@@ -208,12 +234,14 @@ contract('TestCommitRevealVoting', function (accounts) {
         await crv.revealVote(pollID, admin, 0, defaultSalt, { from: voter1 })
   
         voteCounts = await crv.getVoteCounts.call(pollID)
-        expect(voteCounts.map(e => e.toNumber())).to.deep.equal([0,1,1])
+        expect(voteCounts.numForVotes.toNumber()).to.equal(0)
+        expect(voteCounts.numAgainstVotes.toNumber()).to.equal(1)
+        expect(voteCounts.numCommittedButNotRevealedVotes.toNumber()).to.equal(1)
   
         didReveal = await crv.didReveal.call(pollID, admin)
         assert.equal(didReveal, true, 'admin\'s vote was revealed')
   
-        let [committed, revealed, vote] = await crv.getVote.call(pollID, admin)
+        let { vote } = await crv.getVote.call(pollID, admin)
         assert.equal(vote.toNumber(), 0, '\'user voted against\' tracked as expected')
       })
   
@@ -221,7 +249,9 @@ contract('TestCommitRevealVoting', function (accounts) {
         await crv.haltCommitPeriod(pollID)
   
         let voteCounts = await crv.getVoteCounts.call(pollID)
-        expect(voteCounts.map(e => e.toNumber())).to.deep.equal([0,0,2])
+        expect(voteCounts.numForVotes.toNumber()).to.equal(0)
+        expect(voteCounts.numAgainstVotes.toNumber()).to.equal(0)
+        expect(voteCounts.numCommittedButNotRevealedVotes.toNumber()).to.equal(2)
   
         let didReveal = await crv.didReveal.call(pollID, admin)
         assert.equal(didReveal, false, 'admin\'s vote was not revealed yet')
@@ -229,12 +259,14 @@ contract('TestCommitRevealVoting', function (accounts) {
         await crv.revealVote(pollID, admin, 0, defaultSalt, { from: voter1 })
   
         voteCounts = await crv.getVoteCounts.call(pollID)
-        expect(voteCounts.map(e => e.toNumber())).to.deep.equal([0,1,1])
+        expect(voteCounts.numForVotes.toNumber()).to.equal(0)
+        expect(voteCounts.numAgainstVotes.toNumber()).to.equal(1)
+        expect(voteCounts.numCommittedButNotRevealedVotes.toNumber()).to.equal(1)
   
         didReveal = await crv.didReveal.call(pollID, admin)
         assert.equal(didReveal, true, 'admin\'s vote was revealed')
   
-        let [committed, revealed, vote] = await crv.getVote.call(pollID, admin)
+        let { vote } = await crv.getVote.call(pollID, admin)
         assert.equal(vote.toNumber(), 0, '\'user voted against\' tracked as expected')
       })
   
@@ -246,12 +278,14 @@ contract('TestCommitRevealVoting', function (accounts) {
         await crv.revealVote(pollID, admin, 0, defaultSalt, { from: voter1 })
   
         voteCounts = await crv.getVoteCounts.call(pollID)
-        expect(voteCounts.map(e => e.toNumber())).to.deep.equal([0,1,1])
+        expect(voteCounts.numForVotes.toNumber()).to.equal(0)
+        expect(voteCounts.numAgainstVotes.toNumber()).to.equal(1)
+        expect(voteCounts.numCommittedButNotRevealedVotes.toNumber()).to.equal(1)
   
         let didReveal = await crv.didReveal.call(pollID, admin)
         assert.equal(didReveal, true, 'admin\'s vote was revealed')
   
-        let [committed, revealed, vote] = await crv.getVote.call(pollID, admin)
+        let { vote } = await crv.getVote.call(pollID, admin)
         assert.equal(vote.toNumber(), 0, '\'user voted against\' tracked as expected')
       })
       
@@ -298,12 +332,14 @@ contract('TestCommitRevealVoting', function (accounts) {
       it('returns the expected vote results', async function() {
         let votePromises = [admin, voter1, voter2].map(acc => crv.getVote.call(pollID, acc))
         let votes = await Promise.all(votePromises)
-        expect(votes.map(e => e[2].toNumber())).to.deep.equal([0,1,1])
+        expect(votes.map(e => e.vote.toNumber())).to.deep.equal([0,1,1])
       })
       
       it('returns the expected vote counts', async function() {
         let voteCounts = await crv.getVoteCounts.call(pollID)
-        expect(voteCounts.map(v => v.toNumber())).to.deep.equal([2,1,1])
+        expect(voteCounts.numForVotes.toNumber()).to.equal(2)
+        expect(voteCounts.numAgainstVotes.toNumber()).to.equal(1)
+        expect(voteCounts.numCommittedButNotRevealedVotes.toNumber()).to.equal(1)
   
         await crv.haltRevealPeriod(pollID)
         pollEnded = await crv.pollEnded(pollID)
@@ -328,7 +364,7 @@ contract('TestCommitRevealVoting', function (accounts) {
       
   
       it('maintains commit phase after votes & elapsed time', async function() {
-        await web3.currentProvider.send({jsonrpc: "2.0", method: "evm_increaseTime", params: [96*3600], id: 0})
+        await promisify(web3.currentProvider.send)({jsonrpc: "2.0", method: "evm_increaseTime", params: [96*3600], id: 0})
   
         // Commitments from voters 1, 2 and 3
         await crv.commitVote(pollID, secretVoteYes, { from: voter1 })
@@ -342,19 +378,19 @@ contract('TestCommitRevealVoting', function (accounts) {
       })
   
       it('tracks the phase transition when halted after more votes & elapsed time', async function() {
-        await web3.currentProvider.send({jsonrpc: "2.0", method: "evm_increaseTime", params: [96*3600], id: 0})
+        await promisify(web3.currentProvider.send)({jsonrpc: "2.0", method: "evm_increaseTime", params: [96*3600], id: 0})
   
         // Commitments from voters 1, 2 and 3
         await crv.commitVote(pollID, secretVoteYes, { from: voter1 })
         await crv.commitVote(pollID, secretVoteYes, { from: voter2 })
         await crv.commitVote(pollID, secretVoteYes, { from: voter3 })
         
-        await web3.currentProvider.send({jsonrpc: "2.0", method: "evm_increaseTime", params: [96*3600], id: 0})
+        await promisify(web3.currentProvider.send)({jsonrpc: "2.0", method: "evm_increaseTime", params: [96*3600], id: 0})
         
         // Commitment from admin
         await crv.commitVote(pollID, secretVoteNo, { from: admin })
         
-        await web3.currentProvider.send({jsonrpc: "2.0", method: "evm_increaseTime", params: [96*3600], id: 0})
+        await promisify(web3.currentProvider.send)({jsonrpc: "2.0", method: "evm_increaseTime", params: [96*3600], id: 0})
         
         result = await crv.commitPeriodActive.call(pollID)
         assert.equal(result, true)
@@ -379,13 +415,13 @@ contract('TestCommitRevealVoting', function (accounts) {
       })
   
       it('maintains reveal phase after reveals & ends it after elapsed time', async function() {
-        await web3.currentProvider.send({jsonrpc: "2.0", method: "evm_increaseTime", params: [96*3600], id: 0})
+        await promisify(web3.currentProvider.send)({jsonrpc: "2.0", method: "evm_increaseTime", params: [96*3600], id: 0})
   
         // Commitments from voters 1, 2 and 3
         await crv.commitVote(pollID, secretVoteYes, { from: voter1 })
         await crv.commitVote(pollID, secretVoteYes, { from: voter2 })
         await crv.commitVote(pollID, secretVoteYes, { from: voter3 })
-        await web3.currentProvider.send({jsonrpc: "2.0", method: "evm_increaseTime", params: [96*3600], id: 0})
+        await promisify(web3.currentProvider.send)({jsonrpc: "2.0", method: "evm_increaseTime", params: [96*3600], id: 0})
         await crv.haltCommitPeriod(pollID)
         
         // Reveals from all voters
@@ -400,7 +436,7 @@ contract('TestCommitRevealVoting', function (accounts) {
         assert.equal(result, true, 'reveal before increaseTime')
   
         // Reveal period ends after elapsed time
-        await web3.currentProvider.send({jsonrpc: "2.0", method: "evm_increaseTime", params: [96*3600], id: 0})
+        await promisify(web3.currentProvider.send)({jsonrpc: "2.0", method: "evm_increaseTime", params: [96*3600], id: 0})
         result = await crv.commitPeriodActive.call(pollID)
         assert.equal(result, false, 'commit after increaseTime')
         result = await crv.revealPeriodActive.call(pollID)
@@ -436,7 +472,7 @@ contract('TestCommitRevealVoting', function (accounts) {
         result = await crv.revealPeriodActive.call(pollID)
         assert.equal(result, false)
   
-        await web3.currentProvider.send({jsonrpc: "2.0", method: "evm_increaseTime", params: [96*3600], id: 0})
+        await promisify(web3.currentProvider.send)({jsonrpc: "2.0", method: "evm_increaseTime", params: [96*3600], id: 0})
   
         result = await crv.commitPeriodActive.call(pollID)
         assert.equal(result, false)
@@ -450,7 +486,7 @@ contract('TestCommitRevealVoting', function (accounts) {
         await crv.commitVote(pollID, secretVoteYes, { from: voter2 })
         await crv.commitVote(pollID, secretVoteYes, { from: voter3 })
         await crv.commitVote(pollID, secretVoteNo, { from: admin })
-        await web3.currentProvider.send({jsonrpc: "2.0", method: "evm_increaseTime", params: [96*3600], id: 0})
+        await promisify(web3.currentProvider.send)({jsonrpc: "2.0", method: "evm_increaseTime", params: [96*3600], id: 0})
         result = await crv.commitPeriodActive.call(pollID)
         assert.equal(result, false)
         result = await crv.revealPeriodActive.call(pollID)
@@ -467,7 +503,7 @@ contract('TestCommitRevealVoting', function (accounts) {
         assert.equal(result, true)
   
         // Elapsed time
-        await web3.currentProvider.send({jsonrpc: "2.0", method: "evm_increaseTime", params: [96*3600], id: 0})
+        await promisify(web3.currentProvider.send)({jsonrpc: "2.0", method: "evm_increaseTime", params: [96*3600], id: 0})
         result = await crv.commitPeriodActive.call(pollID)
         assert.equal(result, false)
         result = await crv.revealPeriodActive.call(pollID)
@@ -480,7 +516,7 @@ contract('TestCommitRevealVoting', function (accounts) {
         await crv.commitVote(pollID, secretVoteYes, { from: voter2 })
         await crv.commitVote(pollID, secretVoteYes, { from: voter3 })
         await crv.commitVote(pollID, secretVoteNo, { from: admin })
-        await web3.currentProvider.send({jsonrpc: "2.0", method: "evm_increaseTime", params: [96*3600], id: 0})
+        await promisify(web3.currentProvider.send)({jsonrpc: "2.0", method: "evm_increaseTime", params: [96*3600], id: 0})
   
         // Reveals from all voters
         await crv.revealVote(pollID, voter1, 1, defaultSalt)
@@ -489,7 +525,7 @@ contract('TestCommitRevealVoting', function (accounts) {
         await crv.revealVote(pollID, admin, 0, defaultSalt)
   
         // Elapsed time
-        await web3.currentProvider.send({jsonrpc: "2.0", method: "evm_increaseTime", params: [96*3600], id: 0})
+        await promisify(web3.currentProvider.send)({jsonrpc: "2.0", method: "evm_increaseTime", params: [96*3600], id: 0})
         result = await crv.commitPeriodActive.call(pollID)
         assert.equal(result, false)
         result = await crv.revealPeriodActive.call(pollID)
@@ -509,7 +545,7 @@ contract('TestCommitRevealVoting', function (accounts) {
         await crv.commitVote(pollID, secretVoteYes, { from: voter2 })
         await crv.commitVote(pollID, secretVoteYes, { from: voter3 })
         await crv.commitVote(pollID, secretVoteNo, { from: admin })
-        await web3.currentProvider.send({jsonrpc: "2.0", method: "evm_increaseTime", params: [96*3600], id: 0})
+        await promisify(web3.currentProvider.send)({jsonrpc: "2.0", method: "evm_increaseTime", params: [96*3600], id: 0})
         
         // Halt reveal phase
         await crv.haltRevealPeriod(pollID)
@@ -521,7 +557,7 @@ contract('TestCommitRevealVoting', function (accounts) {
   
       it('ends the reveal phase when halted, without any commitments', async function() {
         // End commit phase
-        await web3.currentProvider.send({jsonrpc: "2.0", method: "evm_increaseTime", params: [96*3600], id: 0})
+        await promisify(web3.currentProvider.send)({jsonrpc: "2.0", method: "evm_increaseTime", params: [96*3600], id: 0})
         
         // Halt reveal phase
         await crv.haltRevealPeriod(pollID)
@@ -567,7 +603,7 @@ contract('TestCommitRevealVoting', function (accounts) {
         await crv.commitVote(pollID, secretVoteYes, { from: voter1 })
         await crv.commitVote(pollID, secretVoteYes, { from: voter2 })
         await crv.commitVote(pollID, secretVoteYes, { from: voter3 })
-        await web3.currentProvider.send({jsonrpc: "2.0", method: "evm_increaseTime", params: [96*3600], id: 0})
+        await promisify(web3.currentProvider.send)({jsonrpc: "2.0", method: "evm_increaseTime", params: [96*3600], id: 0})
         
         result = await crv.commitPeriodActive.call(pollID)
         assert.equal(result, true)
@@ -603,7 +639,8 @@ contract('TestCommitRevealVoting', function (accounts) {
         assert.equal(result, true)
   
         // Elapsed time
-        await web3.currentProvider.send({jsonrpc: "2.0", method: "evm_increaseTime", params: [96*3600], id: 0})
+        await promisify(web3.currentProvider.send)({jsonrpc: "2.0", method: "evm_increaseTime", params: [96*3600], id: 0})
+        await promisify(web3.currentProvider.send)({jsonrpc: "2.0", method: "evm_increaseTime", params: [96*3600], id: 0})
         result = await crv.commitPeriodActive.call(pollID)
         assert.equal(result, false)
         result = await crv.revealPeriodActive.call(pollID)
@@ -625,7 +662,7 @@ contract('TestCommitRevealVoting', function (accounts) {
         await crv.revealVote(pollID, admin, 0, defaultSalt)
   
         // Elapsed time
-        await web3.currentProvider.send({jsonrpc: "2.0", method: "evm_increaseTime", params: [96*3600], id: 0})
+        await promisify(web3.currentProvider.send)({jsonrpc: "2.0", method: "evm_increaseTime", params: [96*3600], id: 0})
         result = await crv.commitPeriodActive.call(pollID)
         assert.equal(result, false)
         result = await crv.revealPeriodActive.call(pollID)
@@ -697,11 +734,17 @@ contract('TestCommitRevealVoting', function (accounts) {
 
       // vote counts
       let voteCounts = await crv.getVoteCounts.call(pollID1)
-      expect(voteCounts.map(e => e.toNumber())).to.deep.equal([0,0,1])
+      expect(voteCounts.numForVotes.toNumber()).to.equal(0)
+      expect(voteCounts.numAgainstVotes.toNumber()).to.equal(0)
+      expect(voteCounts.numCommittedButNotRevealedVotes.toNumber()).to.equal(1)
       voteCounts = await crv.getVoteCounts.call(pollID2)
-      expect(voteCounts.map(e => e.toNumber())).to.deep.equal([0,0,1])
+      expect(voteCounts.numForVotes.toNumber()).to.equal(0)
+      expect(voteCounts.numAgainstVotes.toNumber()).to.equal(0)
+      expect(voteCounts.numCommittedButNotRevealedVotes.toNumber()).to.equal(1)
       voteCounts = await crv.getVoteCounts.call(pollID3)
-      expect(voteCounts.map(e => e.toNumber())).to.deep.equal([0,0,0])
+      expect(voteCounts.numForVotes.toNumber()).to.equal(0)
+      expect(voteCounts.numAgainstVotes.toNumber()).to.equal(0)
+      expect(voteCounts.numCommittedButNotRevealedVotes.toNumber()).to.equal(0)
 
       // commit status
       result = await crv.didCommit.call(pollID1, admin)
@@ -719,21 +762,29 @@ contract('TestCommitRevealVoting', function (accounts) {
 
       // check status of single vote
       let voteCounts = await crv.getVoteCounts.call(pollID3)
-      expect(voteCounts.map(e => e.toNumber())).to.deep.equal([0,0,1])
+      expect(voteCounts.numForVotes.toNumber()).to.equal(0)
+      expect(voteCounts.numAgainstVotes.toNumber()).to.equal(0)
+      expect(voteCounts.numCommittedButNotRevealedVotes.toNumber()).to.equal(1)
       result = await crv.didCommit.call(pollID3, voter1)
       assert.equal(result, true, 'user has committed')
 
       // reveal votes
-      await web3.currentProvider.send({jsonrpc: "2.0", method: "evm_increaseTime", params: [25*3600], id: 0})
+      await promisify(web3.currentProvider.send)({jsonrpc: "2.0", method: "evm_increaseTime", params: [25*3600], id: 0})
       await crv.revealVotes([pollID1, pollID2, pollID3], [admin, admin, voter1], [1,0,1], [defaultSalt, defaultSalt+1, defaultSalt], {from: voter2})
 
       // vote counts
       voteCounts = await crv.getVoteCounts.call(pollID1)
-      expect(voteCounts.map(e => e.toNumber())).to.deep.equal([1,0,0])
+      expect(voteCounts.numForVotes.toNumber()).to.equal(1)
+      expect(voteCounts.numAgainstVotes.toNumber()).to.equal(0)
+      expect(voteCounts.numCommittedButNotRevealedVotes.toNumber()).to.equal(0)
       voteCounts = await crv.getVoteCounts.call(pollID2)
-      expect(voteCounts.map(e => e.toNumber())).to.deep.equal([0,1,0])
+      expect(voteCounts.numForVotes.toNumber()).to.equal(0)
+      expect(voteCounts.numAgainstVotes.toNumber()).to.equal(1)
+      expect(voteCounts.numCommittedButNotRevealedVotes.toNumber()).to.equal(0)
       voteCounts = await crv.getVoteCounts.call(pollID3)
-      expect(voteCounts.map(e => e.toNumber())).to.deep.equal([1,0,0])
+      expect(voteCounts.numForVotes.toNumber()).to.equal(1)
+      expect(voteCounts.numAgainstVotes.toNumber()).to.equal(0)
+      expect(voteCounts.numCommittedButNotRevealedVotes.toNumber()).to.equal(0)
 
       // check votes
       let vote = await crv.getVote.call(pollID1, admin)
@@ -756,14 +807,20 @@ contract('TestCommitRevealVoting', function (accounts) {
 
       // check status of single vote
       let voteCounts = await crv.getVoteCounts.call(pollID1)
-      expect(voteCounts.map(e => e.toNumber())).to.deep.equal([0,0,2])
+      expect(voteCounts.numForVotes.toNumber()).to.equal(0)
+      expect(voteCounts.numAgainstVotes.toNumber()).to.equal(0)
+      expect(voteCounts.numCommittedButNotRevealedVotes.toNumber()).to.equal(2)
       voteCounts = await crv.getVoteCounts.call(pollID2)
-      expect(voteCounts.map(e => e.toNumber())).to.deep.equal([0,0,2])
+      expect(voteCounts.numForVotes.toNumber()).to.equal(0)
+      expect(voteCounts.numAgainstVotes.toNumber()).to.equal(0)
+      expect(voteCounts.numCommittedButNotRevealedVotes.toNumber()).to.equal(2)
       voteCounts = await crv.getVoteCounts.call(pollID3)
-      expect(voteCounts.map(e => e.toNumber())).to.deep.equal([0,0,3])
+      expect(voteCounts.numForVotes.toNumber()).to.equal(0)
+      expect(voteCounts.numAgainstVotes.toNumber()).to.equal(0)
+      expect(voteCounts.numCommittedButNotRevealedVotes.toNumber()).to.equal(3)
 
       // reveal votes
-      await web3.currentProvider.send({jsonrpc: "2.0", method: "evm_increaseTime", params: [25*3600], id: 0})
+      await promisify(web3.currentProvider.send)({jsonrpc: "2.0", method: "evm_increaseTime", params: [25*3600], id: 0})
       await crv.revealVotes(
         [pollID1, pollID1, pollID2, pollID3, pollID3, pollID3],
         [admin, voter1, admin, admin, voter1, voter2],
@@ -772,11 +829,17 @@ contract('TestCommitRevealVoting', function (accounts) {
 
       // vote counts
       voteCounts = await crv.getVoteCounts.call(pollID1)
-      expect(voteCounts.map(e => e.toNumber())).to.deep.equal([2,0,0])
+      expect(voteCounts.numForVotes.toNumber()).to.equal(2)
+      expect(voteCounts.numAgainstVotes.toNumber()).to.equal(0)
+      expect(voteCounts.numCommittedButNotRevealedVotes.toNumber()).to.equal(0)
       voteCounts = await crv.getVoteCounts.call(pollID2)
-      expect(voteCounts.map(e => e.toNumber())).to.deep.equal([0,1,1])
+      expect(voteCounts.numForVotes.toNumber()).to.equal(0)
+      expect(voteCounts.numAgainstVotes.toNumber()).to.equal(1)
+      expect(voteCounts.numCommittedButNotRevealedVotes.toNumber()).to.equal(1)
       voteCounts = await crv.getVoteCounts.call(pollID3)
-      expect(voteCounts.map(e => e.toNumber())).to.deep.equal([2,1,0])
+      expect(voteCounts.numForVotes.toNumber()).to.equal(2)
+      expect(voteCounts.numAgainstVotes.toNumber()).to.equal(1)
+      expect(voteCounts.numCommittedButNotRevealedVotes.toNumber()).to.equal(0)
 
       // check votes
       let vote = await crv.getVote.call(pollID1, admin)

@@ -1,4 +1,4 @@
-const abi = require('ethereumjs-abi');
+const web3Utils = require('web3-utils')
 const should = require('chai')
   .should();
 
@@ -12,10 +12,11 @@ async function assertRevert (promise) {
   should.fail('Expected "revert()"');
 }
 
-const createVoteHash = (vote, salt) => {
-  const hash = `0x${abi.soliditySHA3(['uint', 'uint'],
-    [vote, salt]).toString('hex')}`;
-  return hash;
+const createVoteHash = (vote, salt) =>
+  web3Utils.soliditySha3(vote, salt)
+
+const createPollId = (address, dataIdentifier, payloadHash) => {
+  return web3Utils.soliditySha3(address, dataIdentifier, payloadHash)
 }
 
 module.exports = { createVoteHash, assertRevert }
