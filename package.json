@@ -14,7 +14,7 @@
     "url": "git+https://github.com/TruSet/commit-reveal-voting.git"
   },
   "author": "Greg Taschuk <greg.taschuk@consensys.net> (https://github.com/gtaschuk) & Neil McLaren <neil.mclaren@consensys.net> (https://github.com/nmclrn)",
-  "license": "MIT",
+  "license": "ALv2",
   "bugs": {
     "url": "https://github.com/TruSet/commit-reveal-voting/issues"
   },
