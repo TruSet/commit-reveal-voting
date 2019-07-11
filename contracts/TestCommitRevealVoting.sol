@@ -10,7 +10,7 @@ contract TestCommitRevealVoting is CommitRevealVoting {
     AbstractRBAC rbac;
 
     constructor(address _rbac) public {
-      require(_rbac != address(0));
+      require(_rbac != address(0), "Invalid RBAC");
       rbac = AbstractRBAC(_rbac);
     }
 
