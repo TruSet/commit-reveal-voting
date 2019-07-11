@@ -1,4 +1,4 @@
-pragma solidity ^0.4.24;
+pragma solidity 0.5.10;
 import "openzeppelin-solidity/contracts/math/SafeMath.sol";
 
 
@@ -85,7 +85,7 @@ contract CommitRevealVoting {
     * @param _pollIDs         Array of identifers associated with target polls
     * @param _secretHashes    Array of commit keccak256 hashes of voter's choices and salts (tightly packed in this order)
     */
-    function _commitVotes(bytes32[] _pollIDs, bytes32[] _secretHashes) internal
+    function _commitVotes(bytes32[] memory _pollIDs, bytes32[] memory _secretHashes) internal
     {
         // make sure the array lengths are all the same
         require(_pollIDs.length == _secretHashes.length);
@@ -135,7 +135,7 @@ contract CommitRevealVoting {
     * @param _voteOptions Array of vote choices (each 0 or 1)
     * @param _salts       Array of secret numbers that were used to generate the vote commitment
     */
-    function _revealVotes(bytes32[] _pollIDs, address[] _voters, uint[] _voteOptions, uint[] _salts) internal {
+    function _revealVotes(bytes32[] memory _pollIDs, address[] memory _voters, uint[] memory _voteOptions, uint[] memory _salts) internal {
         // Make sure the array lengths are all the same
         uint l = _pollIDs.length;
         require(l == _voteOptions.length);
@@ -233,7 +233,7 @@ contract CommitRevealVoting {
     * @return The list of addresses that voted in the poll, regardless of whether or not they
     *         revealed their vote. 
     */
-    function getVoters(bytes32 _pollID) view public returns (address[] voters) {
+    function getVoters(bytes32 _pollID) view public returns (address[] memory voters) {
         return pollMap[_pollID].voters; 
     }
 
