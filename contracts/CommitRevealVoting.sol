@@ -62,12 +62,12 @@ contract CommitRevealVoting {
     */
     function _commitVote(bytes32 _pollID, bytes32 _secretHash) internal
     {
-        require(commitPeriodActive(_pollID));
-        // prevent user from committing to zero node placeholder
-        require(_pollID != 0);
+        // prevent user from committing to a non-existent poll or one in the wrong state
+        require(_pollID != 0, "Not a valid pollID");
+        require(commitPeriodActive(_pollID), "Commit period must be active");
 
         // prevent user from committing a secretHash of 0
-        require(_secretHash != 0);
+        require(_secretHash != 0, "Invalid commitment hash");
 
         Poll storage p = pollMap[_pollID];
         if (p.commitHashes[msg.sender] == bytes32(0)) {
@@ -88,7 +88,7 @@ contract CommitRevealVoting {
     function _commitVotes(bytes32[] memory _pollIDs, bytes32[] memory _secretHashes) internal
     {
         // make sure the array lengths are all the same
-        require(_pollIDs.length == _secretHashes.length);
+        require(_pollIDs.length == _secretHashes.length, "Expected as many secretHashes as pollIDs");
 
         // loop through arrays, committing each individual vote values
         for (uint i = 0; i < _pollIDs.length; i++) {
@@ -105,14 +105,14 @@ contract CommitRevealVoting {
     */
     function _revealVote(bytes32 _pollID, address _voter, uint _voteOption, uint _salt) internal {
         // Make sure the reveal period is active
-        require(revealPeriodActive(_pollID));
+        require(revealPeriodActive(_pollID), "Reveal period must be active");
         require(_voteOption == VOTE_AGAINST || _voteOption == VOTE_FOR, "voteOption must be 0 or 1");
         require(didCommit(_pollID, _voter), "no commitment found"); // make sure user has committed a vote for this poll
         require(!didReveal(_pollID, _voter), "already revealed"); // prevent user from revealing multiple times
         Poll storage p = pollMap[_pollID];
         bytes32 commitHash = p.commitHashes[_voter];
-        require(keccak256(abi.encodePacked(_voteOption, _salt)) == commitHash, "The hash of the vote and salt (tighly packed in taht order) does not match the commitment"); // compare resultant hash from inputs to original commitHash
-        require(p.votesCommittedButNotRevealed > 0);
+        require(keccak256(abi.encodePacked(_voteOption, _salt)) == commitHash, "The hash of the vote and salt (tightly packed in that order) does not match the commitment"); // compare resultant hash from inputs to original commitHash
+        require(p.votesCommittedButNotRevealed > 0, "No votes left to reveal");
 
         if (_voteOption == VOTE_FOR) {
             p.votesFor = p.votesFor.add(1);
@@ -138,9 +138,9 @@ contract CommitRevealVoting {
     function _revealVotes(bytes32[] memory _pollIDs, address[] memory _voters, uint[] memory _voteOptions, uint[] memory _salts) internal {
         // Make sure the array lengths are all the same
         uint l = _pollIDs.length;
-        require(l == _voteOptions.length);
-        require(l == _salts.length);
-        require(l == _voters.length);
+        require(l == _voteOptions.length, "Expected as many voteOptions as pollIDs");
+        require(l == _salts.length, "Expected as many salts as pollIDs");
+        require(l == _voters.length, "Expected as many voters as pollIDs");
 
         // Loop through arrays, revealing each individual vote values
         for (uint i = 0; i < l; i++) {
@@ -188,7 +188,7 @@ contract CommitRevealVoting {
     */
     function _haltCommitPeriod(bytes32 _pollID) internal 
     {
-        require(commitPeriodActive(_pollID));
+        require(commitPeriodActive(_pollID), "Commit period must be active");
         Poll storage p = pollMap[_pollID];
         p.commitsHaltedAt = block.timestamp;
         emit CommitPeriodHalted(_pollID, msg.sender, block.timestamp);
@@ -200,7 +200,7 @@ contract CommitRevealVoting {
     */
     function _haltRevealPeriod(bytes32 _pollID) internal 
     {
-        require(revealPeriodActive(_pollID));
+        require(revealPeriodActive(_pollID), "Reveal period must be active");
         pollMap[_pollID].revealsHaltedAt = block.timestamp;
         emit RevealPeriodHalted(_pollID, msg.sender, block.timestamp);
     }
@@ -254,7 +254,7 @@ contract CommitRevealVoting {
     *         exists/existed.
     */
     function commitDeadline(bytes32 _pollID) view public returns (uint timestamp) {
-        require(pollExists(_pollID));
+        require(pollExists(_pollID), "Poll does not exist");
         Poll memory p = pollMap[_pollID];
 
         if (p.commitDuration == 0) {
@@ -271,7 +271,7 @@ contract CommitRevealVoting {
     * @return Boolean indication of isCommitPeriodActive for target poll
     */
     function commitPeriodActive(bytes32 _pollID) view public returns (bool active) {
-        require(pollExists(_pollID));
+        require(pollExists(_pollID), "Poll does not exist");
         Poll memory p = pollMap[_pollID];
         bool endedEarly = (p.commitsHaltedAt != 0);
         return !endedEarly && !isExpired(commitDeadline(_pollID));
@@ -283,7 +283,7 @@ contract CommitRevealVoting {
     * @return The timestamp at which the commit period started for the given poll
     */
     function commitPeriodStartedTimestamp(bytes32 _pollID) view public returns (uint timestamp) {
-        require(pollExists(_pollID));
+        require(pollExists(_pollID), "Poll does not exist");
         return pollMap[_pollID].commitPeriodStartedAt;
     }
 
@@ -296,7 +296,7 @@ contract CommitRevealVoting {
     *         such deadline exists/existed.
     */
     function revealDeadline(bytes32 _pollID) view public returns (uint timestamp) {
-        require(pollExists(_pollID));
+        require(pollExists(_pollID), "Poll does not exist");
         uint revealDuration = pollMap[_pollID].revealDuration;
         uint revealPeriodStarted = revealPeriodStartedTimestamp(_pollID);
 
@@ -313,7 +313,7 @@ contract CommitRevealVoting {
     * @param _pollID Identifer associated with target poll
     */
     function revealPeriodActive(bytes32 _pollID) view public returns (bool active) {
-        require(pollExists(_pollID));
+        require(pollExists(_pollID), "Poll does not exist");
         Poll memory p = pollMap[_pollID];
         bool endedEarly = (p.revealsHaltedAt != 0);
         return !endedEarly && !isExpired(revealDeadline(_pollID)) && !commitPeriodActive(_pollID);
@@ -325,7 +325,7 @@ contract CommitRevealVoting {
     * @return The timestamp at which the reveal period started for the given poll, or zero if it has not yet started
     */
     function revealPeriodStartedTimestamp(bytes32 _pollID) view public returns (uint timestamp) {
-        require(pollExists(_pollID));
+        require(pollExists(_pollID), "Poll does not exist");
         Poll memory p = pollMap[_pollID];
 
         if (p.commitsHaltedAt != 0) {
@@ -346,7 +346,7 @@ contract CommitRevealVoting {
     * @return Boolean indication of whether user has committed
     */
     function didCommit(bytes32 _pollID, address _voter) view public returns (bool committed) {
-        require(pollExists(_pollID));
+        require(pollExists(_pollID), "Poll does not exist");
         return pollMap[_pollID].commitHashes[_voter] != bytes32(0);
     }
 
@@ -357,7 +357,7 @@ contract CommitRevealVoting {
     @return Boolean indication of whether user has revealed
     */
     function didReveal(bytes32 _pollID, address _voter) view public returns (bool revealed) {
-        require(pollExists(_pollID));
+        require(pollExists(_pollID), "Poll does not exist");
         return pollMap[_pollID].didReveal[_voter];
     }
 
