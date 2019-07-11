@@ -1,4 +1,4 @@
-pragma solidity ^0.4.24;
+pragma solidity 0.5.10;
 import "./AbstractRBAC.sol";
 import "./CommitRevealVoting.sol";
 
@@ -48,7 +48,7 @@ contract TestCommitRevealVoting is CommitRevealVoting {
     * @param _pollIDs         Array of identifers associated with target polls
     * @param _secretHashes    Array of keccak256 hashes of each choice and the corresponding secret salt (tightly packed in this order)
     */
-    function commitVotes(bytes32[] _pollIDs, bytes32[] _secretHashes) external
+    function commitVotes(bytes32[] calldata _pollIDs, bytes32[] calldata _secretHashes) external
         onlyVoters
     {
         _commitVotes(_pollIDs, _secretHashes);
@@ -83,7 +83,7 @@ contract TestCommitRevealVoting is CommitRevealVoting {
     * @param _voteOptions Array of vote choices (each 0 or 1)
     * @param _salts       Array of secret numbers that were used to generate the vote commitment
     */
-    function revealVotes(bytes32[] _pollIDs, address[] _voters, uint[] _voteOptions, uint[] _salts) external {
+    function revealVotes(bytes32[] calldata _pollIDs, address[] calldata _voters, uint[] calldata _voteOptions, uint[] calldata _salts) external {
         _revealVotes(_pollIDs, _voters, _voteOptions, _salts);
     }
 
