@@ -14,16 +14,13 @@ contract TestCommitRevealVoting is CommitRevealVoting {
       rbac = AbstractRBAC(_rbac);
     }
 
-    string public constant ROLE_ADMIN = "commit_reveal_admin";
-    string public constant ROLE_VOTE = "commit_reveal_vote";
-
     modifier onlyAdmin() {
-      rbac.checkRole(msg.sender, ROLE_ADMIN);
+      rbac.checkAdmin(msg.sender);
       _;
     }
 
     modifier onlyVoters() {
-      rbac.checkRole(msg.sender, ROLE_VOTE);
+      rbac.checkVoter(msg.sender);
       _;
     }
 
