@@ -1,3 +1,5 @@
+[CODE](https://github.com/TruSet/commit-reveal-voting)
+
 **This is a work in progress - proceed with caution.**
 
 `CommitRevealVoting` is a generalized imlempentation of a commit reveal voting scheme. Only binary votes (e.g. Yes or No) are currently supported.
